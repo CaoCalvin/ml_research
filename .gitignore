@@ -2,5 +2,5 @@ ml_research_venv/
 data/
 .mypy_cache/
 .ipynb_checkpoints/
-__pychache__/
+__pycache__/
 /settings.json
