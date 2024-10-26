@@ -68,10 +68,10 @@ def split(X: pd.DataFrame, y: pd.DataFrame, CV_portion: float, test_portion: flo
     Returns:
         pd.DataFrame: X_train 
         pd.DataFrame: y_train
-        X_CV
-        y_CV
-        X_test
-        y_test
+        pd.DataFrame: X_CV
+        pd.DataFrame: y_CV
+        pd.DataFrame: X_test
+        pd.DataFrame: y_test
     """
 
     X_train, X_temp, y_train, y_temp = train_test_split(X, y, train_size = (1 - (CV_portion + test_portion)), random_state = seed)
@@ -85,14 +85,14 @@ def grid_search(X_train: pd.DataFrame, y_train: pd.DataFrame,
 
     Created: 2024/10/15
 
-    Parameters:
-    - X_train: features
-    - y_train: labels
-    - param_grid: dictionary where keys are parameter names (str) and values are lists of parameter values to search over
-    - train_model_callback: function that trains a model and returns the trained model
+    Args:
+      X_train (pd.DataFrame): features
+      y_train (pd.DataFrame): labels
+      param_grid (dict): dictionary where keys are parameter names (str) and values are lists of parameter values to search over
+      train_model_callback (function): function that trains a model and returns the trained model
 
     Returns:
-    - pandas DataFrame where rows are combinations of parameter values and each cell contains a trained model
+      pd.DataFrame: rows are combinations of parameter values and each cell contains a trained model
     """
     
     # Get all combinations of parameters from param_grid

@@ -6,12 +6,15 @@ def classify_top(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
        depending on whether the original datapoint is in a specified top percentile of the original datapoints 
        in that column.
 
+       Created: 2024/10/02
+
     Args:
         df (pd.DataFrame): input dataframe with numeric values
         threshold (float): number between 0 and 1 specifying "top" threshold.
 
     Returns:
-        _type_: _description_
+        pd.DataFrame: new dataframe where each cell is True or False depending on whether the corresponding value in
+                      the original dataframe is a "top" value
     """
     # create an empty dataframe
     top_df = pd.DataFrame(index=df.index, columns=df.columns)
@@ -24,7 +27,18 @@ def classify_top(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
 
     return top_df
 
-def assert_no_bad_values(df: pd.DataFrame):
+def assert_no_bad_values(df: pd.DataFrame) -> None:
+    """Raises Error if dataframe contains NaN or values or non-numeric type columns
+
+    Created: 2024/10/02
+
+    Args:
+        df (pd.DataFrame): DataFrame to check
+
+    Raises:
+        ValueError: if contains NaN values
+        ValueError: if contains non-numeric type columns
+    """
     # Check for NaN values
     if df.isnull().values.any():
         raise ValueError("DataFrame contains NaN values.")
@@ -34,13 +48,33 @@ def assert_no_bad_values(df: pd.DataFrame):
     if non_numeric_columns:
         raise ValueError(f"DataFrame contains non-numeric columns: {non_numeric_columns}")
     
-# returns the ID column and main dataframe of a matrix, assuming the training example IDs are in the first column.  
-def seperate_ID(X: pd.DataFrame):
-    return X.iloc[:, 0], X.iloc[:, 1:]
+def seperate_ID(X: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Returns the ID column and main dataframe of a matrix, assuming the training example IDs are in the first column.  
 
-# returns a matrix where every interval rows are combined into a single row, with 
-# each element being the average of the corresponding elements across the interval.
-def avg_rows(df: pd.DataFrame, interval: int):
+    Created: 2024/10/01
+
+    Args:
+        X (pd.DataFrame): DataFrame with labels/IDs in first column
+
+    Returns:
+        pd.DataFrame: label DataFrame
+        pd.DataFrame: other columns from original DataFrame
+    """
+    return pd.DataFrame(X.iloc[:, 0]), pd.DataFrame(X.iloc[:, 1:])
+
+def avg_rows(df: pd.DataFrame, interval: int) -> pd.DataFrame:
+    """returns a matrix where every [interval] rows are combined into a single row, with 
+       each element being the average of the corresponding elements across the interval.
+
+    Created: 2024/10/03
+
+    Args:
+        df (pd.DataFrame): a pandas dataframe
+        interval (int): size of each group to average into one row
+
+    Returns:
+        pd.DataFrame: new dataframe with every [interval] rows averaged together.
+    """
     # Number of new rows after taking average of every four rows
     new_num_rows = df.shape[0] // interval
     
