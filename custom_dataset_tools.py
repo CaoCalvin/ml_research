@@ -48,8 +48,8 @@ def assert_no_bad_values(df: pd.DataFrame) -> None:
     if non_numeric_columns:
         raise ValueError(f"DataFrame contains non-numeric columns: {non_numeric_columns}")
     
-def seperate_ID(X: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Returns the ID column and main dataframe of a matrix, assuming the training example IDs are in the first column.  
+def first_col_to_row_labels(X: pd.DataFrame) -> pd.DataFrame:
+    """Shaves the first column off of a matrix and sets it as the row index labels.  
 
     Created: 2024/10/01
 
@@ -60,7 +60,14 @@ def seperate_ID(X: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         pd.DataFrame: label DataFrame
         pd.DataFrame: other columns from original DataFrame
     """
-    return pd.DataFrame(X.iloc[:, 0]), pd.DataFrame(X.iloc[:, 1:])
+    labels = X.iloc[:, 0]
+    data = pd.DataFrame(X.iloc[:, 1:])
+    data.index = labels
+
+    # this dosesn't solve the problem
+    # data.index = data.index.get_level_values(0)
+
+    return data
 
 def avg_rows(df: pd.DataFrame, interval: int) -> pd.DataFrame:
     """returns a matrix where every [interval] rows are combined into a single row, with 
@@ -77,6 +84,9 @@ def avg_rows(df: pd.DataFrame, interval: int) -> pd.DataFrame:
     """
     # Number of new rows after taking average of every four rows
     new_num_rows = df.shape[0] // interval
+
+    # Every 4th row label
+    new_row_labels = df.index[::interval]
     
     # Initialize output dataframe 
     df_avg = pd.DataFrame(columns=df.columns, index=range(new_num_rows), dtype=float)
@@ -87,5 +97,7 @@ def avg_rows(df: pd.DataFrame, interval: int) -> pd.DataFrame:
         
         # ensure the resulting averages are numeric
         df_avg.iloc[i, :] = avg_values.astype(float)
+
+    df_avg.index = new_row_labels
 
     return df_avg
