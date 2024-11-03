@@ -2,6 +2,8 @@ import itertools
 from typing import Optional
 import pandas as pd
 import numpy as np
+import ml_data_objects as mdo
+
 
 # Plotting
 import matplotlib.pyplot as plt
@@ -10,6 +12,9 @@ import matplotlib.patches as mpatches
 from scipy.stats import pearsonr
 
 from matplotlib.colors import LinearSegmentedColormap
+
+from sklearn.preprocessing import StandardScaler
+
 
 
 def plot_prediction_vs_actual(axs: np.ndarray, row: int, col: int, predicted: pd.DataFrame, actual: pd.DataFrame, 
@@ -53,7 +58,7 @@ def plot_prediction_vs_actual(axs: np.ndarray, row: int, col: int, predicted: pd
     pearson_coef, _ = pearsonr(actual.iloc[:, 0], predicted.iloc[:, 0])
     axs[row, col].text(0.05, 0.95, f'Pearson Coefficient = {pearson_coef:.2f}', transform=axs[row, col].transAxes, fontsize=10, verticalalignment='top')
     
-def plot_predictions_vs_actuals(predictions: pd.DataFrame, actuals: pd.DataFrame, 
+def plot_classification_results(predictions: pd.DataFrame, actuals: pd.DataFrame, 
                                 predictions_top: Optional[pd.DataFrame] = None, actuals_top: Optional[pd.DataFrame] = None):
     """Plots all predictions of a multi-output ML model in a series of scatter plots in one row.
 
@@ -77,7 +82,7 @@ def plot_predictions_vs_actuals(predictions: pd.DataFrame, actuals: pd.DataFrame
     
     # if only one output variable, axs will not be an array, so wrap it
     if num_vars == 1:
-        axs = [axs]    
+        axs = np.array(axs)   
     for col in range(num_vars):
         # Extract actual & predicted values for the current variable
         predicted = predictions.iloc[:, col].to_frame()
@@ -109,80 +114,131 @@ def plot_predictions_vs_actuals(predictions: pd.DataFrame, actuals: pd.DataFrame
     plt.tight_layout()
     plt.show()
 
-def plot_grid_search(X_test: pd.DataFrame, y_test: pd.DataFrame, param_grid: dict, model_grid: pd.DataFrame, target_var: str) -> None:
-    """Plots a grid of scatter plots for the results of a grid search.
-
-    Created 10/28/2024
+def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame], x_axis_name: str, x_axis_labels: list, y_axis_name: str, y_axis_labels: list) -> tuple[int, int]:
+    """Plots a grid of scatter plots for the given data. 
+    
+    Created: 2024/11/02
 
     Args:
-        model_grid (pd.DataFrame): DataFrame containing the results of a grid search.
-            Each row corresponds to a combination of parameters and each cell contains a trained model.
-        y_test (pd.DataFrame): DataFrame containing the actual labels for each training example.
-        param_grid (dict): Dictionary containing the parameter names and values used in the grid search.
-        target_var (str): Name of the target column to plot from y_test
+        x_grid (np.ndarray): 2D numpy array of DataFrames, each with one column of data.
+        y_grid (np.ndarray): 2D numpy array of DataFrames, each with one column of data.
+        x_axis_labels (list): List of labels for the x-axis.
+        x_axis_name (str): Name of the x-axis.
+        y_axis_labels (list): List of labels for the y-axis.
+        y_axis_name (str): Name of the y-axis.
+
+    Returns:
+        tuple[int, int]: Indices of the grid with the best Pearson coefficient.
     """
 
-    # Define the colormap to color graphs based on Pearson coefficients
-    cmap = LinearSegmentedColormap.from_list('custom', ['white', '#ffffcc', '#ffff00'])
-
-    # Get the parameter names and values from the param_grid dictionary
-    param_names = list(param_grid.keys())
-    param_values = list(param_grid.values())
-
+    assert x_grid.shape == y_grid.shape, f"x and y grids must have the same shape, but they have shapes {x_grid.shape} and {y_grid.shape}"
+    for i in range(x_grid.shape[0]):
+        for j in range(x_grid.shape[1]):
+            assert isinstance(x_grid[i, j], pd.DataFrame), \
+                f"All dataframes in x_grid must be DataFrames, but {type(x_grid[i, j])} was found at ({i}, {j})"       
+            assert isinstance(y_grid[i, j], pd.DataFrame), \
+                f"All dataframes in y_grid must be DataFrames, but {type(y_grid[i, j])} was found at ({i}, {j})"
+            assert x_grid[i, j].shape[1] == 1, \
+                f"All dataframes in x_grid must have only 1 column, but {x_grid[i, j].shape[1]} was found at ({i}, {j})"
+            assert y_grid[i, j].shape[1] == 1, \
+                f"All dataframes in y_grid must have only 1 column, but {y_grid[i, j].shape[1]} was found at ({i}, {j})"
+            assert x_grid[i, j].shape[0] == y_grid[i, j].shape[0], \
+                f"All corresponding dataframes in x_grid and y_grid must have the same number of datapoints, but {x_grid[i, j].shape[0]} and {y_grid[i, j].shape[0]} were found at ({i}, {j})"
+    
     # Get the number of rows and columns for the grid of plots
-    num_rows, num_cols = model_grid.shape
-
-    # Calculate the Pearson coefficients for each plot
-    pearson_coefs = []
-    for i, param_combination in enumerate(itertools.product(*param_values)):
-        row_idx = i // num_cols
-        col_idx = i % num_cols
-
-        # Get the trained model for the current parameter combination
-        model = model_grid.iloc[row_idx, col_idx]
-
-        # Make predictions using the trained model
-        y_pred = pd.DataFrame(model.predict(X_test), index=y_test.index, columns=y_test.columns)
-
-        # Calculate the Pearson coefficient for the current plot
-        pearson_coef = y_pred[[target_var]].corrwith(y_test[[target_var]])
-        pearson_coefs.append(pearson_coef)
-
-    # Normalize the Pearson coefficients to range from 0 to 1
-    pearson_coefs = np.array(pearson_coefs)
-    pearson_coefs = (pearson_coefs - pearson_coefs.min()) / (pearson_coefs.max() - pearson_coefs.min())
+    num_rows, num_cols = x_grid.shape
 
     # Create a figure with a grid of subplots
     fig, axs = plt.subplots(nrows=num_rows, ncols=num_cols, figsize=(5 * num_cols, 5 * num_rows))
 
-    # Set the chart title and row and column labels
-    for i, param_combination in enumerate(itertools.product(*param_values)):
-        row_idx = i // num_cols
-        col_idx = i % num_cols
+    # Set entire subplot grid title
+    fig.suptitle(f"{x_axis_name} vs. {y_axis_name}")
 
-        # Get the row and column labels
-        row_label = param_combination[0]
-        col_label = param_combination[1]
+    # Define the colormap to color graphs based on Pearson coefficients from red to green
+    cmap = LinearSegmentedColormap.from_list('custom', ['#ffcccc', '#ffffcc', '#ccffcc'])
+    
+    # Calculate the Pearson coefficients for each plot
+    pearson_coefs = np.zeros(x_grid.shape)
+    max_pearson_coef = 0
+    max_pearson_coef_idx = None
+    for i in range(num_rows):
+        for j in range(num_cols):
+            # Get the data for the current plot
+            x = x_grid[i, j]
+            y = y_grid[i, j]
 
-        # Get the trained model for the current parameter combination
-        model = model_grid.iloc[row_idx, col_idx]
+            # Calculate the Pearson coefficient for the current plot
+            pearson_coef, _ = pearsonr(x.iloc[:, 0], y.iloc[:, 0])
+            pearson_coefs[i, j] = pearson_coef
 
-        # Make predictions using the trained model
-        y_pred = pd.DataFrame(model.predict(X_test), index=y_test.index, columns=y_test.columns)
+            # Plot the data using plot_prediction_vs_actual
+            plot_prediction_vs_actual(axs, i, j, x, y)
 
-        # Plot the predictions vs actual values for the current parameter combination
-        plot_prediction_vs_actual(axs, row_idx, col_idx, y_pred[[target_var]], y_test[[target_var]])
+            # Set the title of the plot
+            axs[i, j].set_title(f"{x_axis_name}={x_axis_labels[i]}, {y_axis_name}={y_axis_labels[j]}")
 
-        # Set the title for the current subplot
-        axs[row_idx, col_idx].set_title(f"{param_names[0]}={param_combination[0]}, {param_names[1]}={param_combination[1]}")
-        axs[row_idx, col_idx].set_xlabel("Predicted")
-        axs[row_idx, col_idx].set_ylabel("Actual")
+            # Highlight plot with highest Pearson coefficient in bright green
+            if pearson_coef > max_pearson_coef:
+                max_pearson_coef = pearson_coef
+                max_pearson_coef_idx = (i, j)
 
-        # Set the background color of the subplot based on the Pearson coefficient
-        axs[row_idx, col_idx].set_facecolor(cmap(pearson_coefs[i]))
+    # Normalize the Pearson coefficients to range from 0 to 1
+    pearson_coefs = (pearson_coefs - pearson_coefs.min()) / (pearson_coefs.max() - pearson_coefs.min())
 
-    # Layout so plots do not overlap
-    fig.tight_layout()
+    # Color the plots based on the Pearson coefficients
+    for i in range(num_rows):
+        for j in range(num_cols):
+            axs[i, j].set_facecolor(cmap(pearson_coefs[i, j]))
+            
+    if max_pearson_coef_idx is not None:
+        axs[max_pearson_coef_idx[0], max_pearson_coef_idx[1]].set_facecolor('#00bfff')
 
-    # Show the plot
+    # Adjust layout
+    plt.tight_layout()
     plt.show()
+
+    return max_pearson_coef_idx
+
+def eval_grid_search(X_test: pd.DataFrame, X_scaler: StandardScaler, y_test: pd.DataFrame, y_scaler: StandardScaler, model_grid: np.ndarray, x_params: mdo.AxisParams, y_params: mdo.AxisParams) -> tuple[int, int]:
+    """Scales the data and makes predictions using the model_grid.
+
+    Created: 2024/11/02
+
+    Args:
+        X_test (pd.DataFrame): Test data.
+        X_scaler (StandardScaler): Scaler for the test data.
+        y_test (pd.DataFrame): Test labels.
+        y_scaler (StandardScaler): Scaler for the test labels.
+        model_grid (np.ndarray): 2D numpy array of DataFrames. Each cell contains a trained model.
+        x_params (AxisParams): Parameters for the x-axis.
+        y_params (AxisParams): Parameters for the y-axis.        
+        target_var (str): Name of the target column.
+
+    Returns:
+    tuple[int, int]: Indices of the grid with the best Pearson coefficient.
+    """
+    # Scale X_test
+    X_test_scaled = X_scaler.transform(X_test)
+
+    # Convert X_test_scaled to a DataFrame
+    X_test_scaled = pd.DataFrame(X_test_scaled, index=X_test.index, columns=X_test.columns)
+
+    # Initialize numpy array to store predictions
+    y_pred = np.zeros(model_grid.shape, dtype=pd.DataFrame)
+
+    # Make predictions using the trained models on scaled X_test
+    for i in range(model_grid.shape[0]):
+        for j in range(model_grid.shape[1]):
+            model = model_grid[i, j]
+            single_pred_scaled = pd.DataFrame(model.predict(X_test_scaled), index=y_test.index, columns=y_test.columns)
+            single_pred = pd.DataFrame(y_scaler.inverse_transform(single_pred_scaled), index=y_test.index, columns=y_test.columns)
+            y_pred[i, j] = single_pred    
+
+    y_test_grid = np.empty_like(y_pred)  # Initialize an empty array with the same shape as y_pred
+    for i in range(y_pred.shape[0]):
+        for j in range(y_pred.shape[1]):
+            y_test_grid[i, j] = y_test.copy()  # Copy y_test for each element
+    
+    top_pearson_coef_idx = plot_grid(y_pred, y_test_grid, x_params.name, x_params.values, y_params.name, y_params.values)
+
+    return top_pearson_coef_idx

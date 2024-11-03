@@ -1,6 +1,39 @@
  
 import pandas as pd
 
+import pandas as pd
+from sklearn.metrics import f1_score, accuracy_score, cohen_kappa_score
+from sklearn.metrics import confusion_matrix
+
+def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> None:
+    """
+    Print neatly formatted table of f1 score, sensitivity, specificity, and kappa 
+    for each column given two pandas boolean dataframes.
+
+    Created 2024/10/29
+
+    Parameters:
+    predictions (pd.DataFrame): Predictions dataframe
+    actual (pd.DataFrame): Actual dataframe
+    """
+    metrics = []
+    for col in predictions.columns:
+        y_pred = predictions[col]
+        y_true = actual[col]
+        
+        # Calculate metrics
+        f1 = f1_score(y_true, y_pred)
+        tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+        sensitivity = tp / (tp + fn)
+        specificity = tn / (tn + fp)
+        kappa = cohen_kappa_score(y_true, y_pred)
+        
+        # Append to list
+        metrics.append([col, f1, sensitivity, specificity, kappa])
+    
+    # Print table
+    print(pd.DataFrame(metrics, columns=['Variable', 'F1 Score', 'Sensitivity', 'Specificity', 'Kappa']))
+
 def classify_top(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
     """Returns dataframe of same shape as input dataframe, with each cell being "True" or "False" 
        depending on whether the original datapoint is in a specified top percentile of the original datapoints 
