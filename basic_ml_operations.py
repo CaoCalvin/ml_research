@@ -1,6 +1,9 @@
 # preprocessing
+import numpy as np
 from sklearn.model_selection import train_test_split
 
+# data containers
+import ml_data_objects as mdo
 import pandas as pd
 
 # ML models
@@ -11,8 +14,8 @@ import itertools
 
 
 # trains a multi-output regressor SVM model.
-def train_SVR(X_train: pd.DataFrame, y_train: pd.DataFrame, **kwargs) -> MultiOutputRegressor:
-    """Train a Multioutput Regressor using SVM.
+def train_SVR(X_train: pd.DataFrame, y_train: pd.DataFrame, **kwargs) -> SVR:
+    """Train an SVR Regressor using SVM.
 
     Created: 2024/09/10
 
@@ -21,11 +24,10 @@ def train_SVR(X_train: pd.DataFrame, y_train: pd.DataFrame, **kwargs) -> MultiOu
         y_train (pd.DataFrame): labels
 
     Returns:
-        MultiOutputRegressor: The model trained
+        SVR: The model trained
     """
 
-    svr = SVR(**kwargs)  
-    model = MultiOutputRegressor(svr)
+    model = SVR(**kwargs)  
     model.fit(X_train, y_train)
     return model
 
@@ -59,7 +61,9 @@ def split(X: pd.DataFrame, y: pd.DataFrame, CV_portion: float, test_portion: flo
     return X_train, y_train, X_CV, y_CV, X_test, y_test
 
 
-def grid_search(X_train: pd.DataFrame, y_train: pd.DataFrame, param_grid: dict, train_model_callback: callable, **kwargs) -> pd.DataFrame:
+
+def grid_search(X_train: pd.DataFrame, y_train: pd.DataFrame, x_axis_params: mdo.AxisParams, y_axis_params: mdo.AxisParams,
+                train_model_callback: callable, **kwargs) -> np.ndarray:
     """Grid search using provided train_model_callback function
 
     Created: 2024/10/15
@@ -67,28 +71,32 @@ def grid_search(X_train: pd.DataFrame, y_train: pd.DataFrame, param_grid: dict, 
     Args:
       X_train (pd.DataFrame): features
       y_train (pd.DataFrame): labels
-      param_grid (dict): dictionary where keys are parameter names (str) and values are lists of parameter values to search over
+      x_axis_params (AxisParams): parameters for the x-axis
+      y_axis_params (AxisParams): parameters for the y-axis
       train_model_callback (function): function that trains a model and returns the trained model
 
     Returns:
-      pd.DataFrame: rows are combinations of parameter values and each cell contains a trained model
+      np.ndarray: 2D numpy array where each cell contains a trained model
     """
-    
-    # Get all combinations of parameters from param_grid
-    param_combinations = list(itertools.product(*param_grid.values()))
-    
-    # Create a DataFrame to store the models with param combinations as the index (using MultiIndex)
-    param_names = list(param_grid.keys())
-    model_grid = pd.DataFrame(index=param_grid[param_names[0]], columns=param_grid[param_names[1]])
-    
+
+    # Get all combinations of parameters from x_axis_params and y_axis_params
+    param_combinations = list(itertools.product(x_axis_params.values, y_axis_params.values))
+
+    # Create a 2D numpy array to store the models
+    num_rows = len(x_axis_params.values)
+    num_cols = len(y_axis_params.values)
+    model_grid = np.empty((num_rows, num_cols), dtype=object)
+
     # Loop through each combination of parameters
-    for params in param_combinations:
+    for i, (x_param, y_param) in enumerate(param_combinations):
         # Train the model using the train_model_callback and the current parameter combination
-        model = train_model_callback(X_train, y_train, **dict(zip(param_names, params)), **kwargs)
-        
+        model = train_model_callback(X_train, y_train, **dict(zip([x_axis_params.name, y_axis_params.name], [x_param, y_param])), **kwargs)
+
         # Store the model in the corresponding row and column
-        model_grid.loc[params[0], params[1]] = model
-    
+        row_idx = i % num_rows
+        col_idx = i // num_rows
+        model_grid[row_idx, col_idx] = model
+
     return model_grid
 
 def power_list(base: float, start: int, end: int) -> list:
