@@ -99,6 +99,54 @@ def grid_search(X_train: pd.DataFrame, y_train: pd.DataFrame, x_axis_params: mdo
 
     return model_grid
 
+from sklearn.model_selection import KFold
+
+def k_fold_grid_search(X_train_scaled: pd.DataFrame, y_train_scaled: pd.DataFrame, 
+                       x_axis_params: mdo.AxisParams, y_axis_params: mdo.AxisParams,
+                       train_model_callback: callable, kfold: KFold, **kwargs) -> np.ndarray:
+    """Grid search using k-fold cross-validation and provided train_model_callback function
+
+    Created: 2024/11/10
+
+    Args:
+      X_train_scaled (pd.DataFrame): features
+      y_train_scaled (pd.DataFrame): labels
+      x_axis_params (AxisParams): parameters for the x-axis
+      y_axis_params (AxisParams): parameters for the y-axis
+      train_model_callback (function): function that trains a model and returns the trained model
+      kfold (KFold): KFold object for cross-validation
+      **kwargs: additional arguments to pass to train_model_callback
+
+    Returns:
+      np.ndarray: 2D numpy array where each cell contains a list of k trained models
+    """
+
+    # Get all combinations of parameters from x_axis_params and y_axis_params
+    param_combinations = list(itertools.product(x_axis_params.values, y_axis_params.values))
+
+    # Create a 2D numpy array to store the lists of models
+    num_rows = len(x_axis_params.values)
+    num_cols = len(y_axis_params.values)
+    model_grid = np.empty((num_rows, num_cols), dtype=object)
+
+    # Perform k-fold cross-validation
+    for train_index, val_index in kfold.split(X_train_scaled):
+        X_fold, X_val = X_train_scaled.iloc[train_index], X_train_scaled.iloc[val_index]
+        y_fold, y_val = y_train_scaled.iloc[train_index], y_train_scaled.iloc[val_index]
+        
+        # Loop through each combination of parameters
+        for i, (x_param, y_param) in enumerate(param_combinations):
+            if model_grid[i % num_rows, i // num_rows] is None:
+                model_grid[i % num_rows, i // num_rows] = []
+
+            # Train the model using the train_model_callback and the current parameter combination
+            model = train_model_callback(X_fold, y_fold, 
+                                         **{x_axis_params.name: x_param, y_axis_params.name: y_param}, 
+                                         **kwargs)
+            model_grid[i % num_rows, i // num_rows].append(model)
+
+    return model_grid
+
 def power_list(base: float, start: int, end: int) -> list:
     """Returns list of powers of base between two specified degrees, inclusive; used to generate grid search values
 
