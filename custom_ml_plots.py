@@ -1,4 +1,3 @@
-import itertools
 from typing import Optional
 import pandas as pd
 import numpy as np
@@ -14,6 +13,9 @@ from scipy.stats import pearsonr
 from matplotlib.colors import LinearSegmentedColormap
 
 from sklearn.preprocessing import StandardScaler
+
+# import k-fold cross-validation
+from sklearn.model_selection import KFold
 
 
 
@@ -114,7 +116,7 @@ def plot_classification_results(predictions: pd.DataFrame, actuals: pd.DataFrame
     plt.tight_layout()
     plt.show()
 
-def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame], x_axis_name: str, x_axis_labels: list, y_axis_name: str, y_axis_labels: list) -> tuple[int, int]:
+def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame], x_axis: mdo.AxisParams, y_axis: mdo.AxisParams) -> tuple[plt.Figure, np.ndarray]:
     """Plots a grid of scatter plots for the given data. 
     
     Created: 2024/11/02
@@ -128,7 +130,7 @@ def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame]
         y_axis_name (str): Name of the y-axis.
 
     Returns:
-        tuple[int, int]: Indices of the grid with the best Pearson coefficient.
+        tuple[plt.Figure, np.ndarray]: Figure and 2D numpy array of axes.
     """
 
     assert x_grid.shape == y_grid.shape, f"x and y grids must have the same shape, but they have shapes {x_grid.shape} and {y_grid.shape}"
@@ -152,52 +154,110 @@ def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame]
     fig, axs = plt.subplots(nrows=num_rows, ncols=num_cols, figsize=(5 * num_cols, 5 * num_rows))
 
     # Set entire subplot grid title
-    fig.suptitle(f"{x_axis_name} vs. {y_axis_name}")
+    fig.suptitle(f"{x_axis.name} vs. {y_axis.name}")
 
-    # Define the colormap to color graphs based on Pearson coefficients from red to green
-    cmap = LinearSegmentedColormap.from_list('custom', ['#ffcccc', '#ffffcc', '#ccffcc'])
-    
-    # Calculate the Pearson coefficients for each plot
-    pearson_coefs = np.zeros(x_grid.shape)
-    max_pearson_coef = 0
-    max_pearson_coef_idx = None
+    # Determine overall min and max values
+    overall_min = min(np.min([df.min().min() for df in x_grid.flatten()]), 
+                      np.min([df.min().min() for df in y_grid.flatten()]))
+    overall_max = max(np.max([df.max().max() for df in x_grid.flatten()]), 
+                      np.max([df.max().max() for df in y_grid.flatten()]))
+
+    # Add a small padding to ensure all points are visible
+    padding = (overall_max - overall_min) * 0.05
+    plot_min = overall_min - padding
+    plot_max = overall_max + padding
+
     for i in range(num_rows):
         for j in range(num_cols):
-            # Get the data for the current plot
-            x = x_grid[i, j]
-            y = y_grid[i, j]
+            ax = axs[i, j]
+            x_data = x_grid[i, j]
+            y_data = y_grid[i, j]
 
-            # Calculate the Pearson coefficient for the current plot
-            pearson_coef, _ = pearsonr(x.iloc[:, 0], y.iloc[:, 0])
-            pearson_coefs[i, j] = pearson_coef
+            # Scatter plot
+            ax.scatter(x_data, y_data, color='navy', s = 10, alpha=0.25)
 
-            # Plot the data using plot_prediction_vs_actual
-            plot_prediction_vs_actual(axs, i, j, x, y)
+            # Set labels
+            ax.set_xlabel(f"Predicted")
+            ax.set_ylabel(f"Actual")
 
-            # Set the title of the plot
-            axs[i, j].set_title(f"{x_axis_name}={x_axis_labels[i]}, {y_axis_name}={y_axis_labels[j]}")
+            # Set the same limits for both x and y axes
+            ax.set_xlim(plot_min, plot_max)
+            ax.set_ylim(plot_min, plot_max)
 
-            # Highlight plot with highest Pearson coefficient in bright green
-            if pearson_coef > max_pearson_coef:
-                max_pearson_coef = pearson_coef
-                max_pearson_coef_idx = (i, j)
+            # Set title denoting which parameters were used
+            ax.set_title(f"{x_axis.name} = {x_axis.values[i]}, {y_axis.name} = {y_axis.values[j]}")
 
-    # Normalize the Pearson coefficients to range from 0 to 1
-    pearson_coefs = (pearson_coefs - pearson_coefs.min()) / (pearson_coefs.max() - pearson_coefs.min())
 
-    # Color the plots based on the Pearson coefficients
-    for i in range(num_rows):
-        for j in range(num_cols):
-            axs[i, j].set_facecolor(cmap(pearson_coefs[i, j]))
-            
-    if max_pearson_coef_idx is not None:
-        axs[max_pearson_coef_idx[0], max_pearson_coef_idx[1]].set_facecolor('#00bfff')
-
-    # Adjust layout
     plt.tight_layout()
-    plt.show()
 
-    return max_pearson_coef_idx
+    return fig, axs
+
+def calculate_pearson_coefficients(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame]) -> np.ndarray:
+    """
+    Calculate Pearson coefficients for the given data.
+
+    Args:
+        x_grid (np.ndarray): 2D numpy array of DataFrames for x values
+        y_grid (np.ndarray): 2D numpy array of DataFrames for y values
+
+    Returns:
+        np.ndarray: 2D numpy array of Pearson coefficients
+    """
+    num_rows, num_cols = x_grid.shape
+    pearson_coeffs = np.zeros((num_rows, num_cols))
+
+    for i in range(num_rows):
+        for j in range(num_cols):
+            x_data = x_grid[i, j]
+            y_data = y_grid[i, j]
+            pearson_coef, _ = pearsonr(x_data.iloc[:, 0], y_data.iloc[:, 0])
+            pearson_coeffs[i, j] = pearson_coef
+
+    return pearson_coeffs
+
+def color_spectrum(fig: plt.Figure, axs: np.ndarray, values: np.ndarray, label: str = "Value") -> tuple[plt.Figure, np.ndarray]:
+    """
+    Highlight the plots according to their given values.
+
+    Created: 2024/11/03
+
+    Args:
+        fig (plt.Figure): The figure containing the subplots
+        axs (np.ndarray): Array of axes for each subplot
+        values (np.ndarray): 2D numpy array of values to be highlighted
+        label (str): Label to use for the text in each subplot. Default is "Value"
+
+    Returns:
+        tuple[plt.Figure, np.ndarray]: 
+            - The modified figure
+            - The modified axes array
+    """
+    num_rows, num_cols = values.shape
+    best_indices = np.unravel_index(np.argmax(values), values.shape)
+
+    # Define colormap (red to yellow to green)
+    cmap = LinearSegmentedColormap.from_list("", ["#FFB3BA", "#FFFFB3", "#BAFFC9"])
+
+    # Normalize values to [0, 1] for coloring
+    norm_values = (values - np.min(values)) / (np.max(values) - np.min(values))
+
+    for i in range(num_rows):
+        for j in range(num_cols):
+            ax = axs[i, j]
+            value = values[i, j]
+            
+            # Set background color based on normalized value
+            color = cmap(norm_values[i, j])
+            ax.set_facecolor(color)
+            
+            # Add text with value
+            ax.text(0.05, 0.95, f'{label} = {value:.2f}', 
+                    transform=ax.transAxes, fontsize=10, verticalalignment='top')
+
+    # Highlight the best value in bright cyan
+    axs[best_indices[0], best_indices[1]].set_facecolor('cyan')
+
+    return fig, axs
 
 def eval_grid_search(X_test: pd.DataFrame, X_scaler: StandardScaler, y_test: pd.DataFrame, y_scaler: StandardScaler, model_grid: np.ndarray, x_params: mdo.AxisParams, y_params: mdo.AxisParams) -> tuple[int, int]:
     """Scales the data and makes predictions using the model_grid.
@@ -242,3 +302,108 @@ def eval_grid_search(X_test: pd.DataFrame, X_scaler: StandardScaler, y_test: pd.
     top_pearson_coef_idx = plot_grid(y_pred, y_test_grid, x_params.name, x_params.values, y_params.name, y_params.values)
 
     return top_pearson_coef_idx
+
+def eval_k_fold_grid_search(X_sc: pd.DataFrame, y_sc: pd.DataFrame, 
+                            kfold: KFold, model_grid: np.ndarray, 
+                            x_params: mdo.AxisParams, y_params: mdo.AxisParams) -> tuple[np.ndarray, np.ndarray]:
+    """Evaluates the k-fold grid search results using the entire scaled dataset.
+
+    Created: 2024/11/03
+
+    Args:
+        X_sc (pd.DataFrame): Scaled feature set.
+        y_sc (pd.DataFrame): Scaled label set.
+        kfold (KFold): KFold object for cross-validation.
+        model_grid (np.ndarray): 2D numpy array of lists. Each cell contains k trained models.
+        x_params (AxisParams): Parameters for the x-axis.
+        y_params (AxisParams): Parameters for the y-axis.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: 2D numpy array of predictions where each cell contains list of k predictions and 2D numpy array of actual values
+    """
+    # Initialize numpy array to store predictions for each parameter combination
+    y_pred_grid = np.zeros(model_grid.shape, dtype=object)
+    y_test_grid = np.zeros(model_grid.shape, dtype=object)
+
+    # Iterate through each fold
+    for fold, (_, test_index) in enumerate(kfold.split(X_sc)):
+        X_CV = X_sc.iloc[test_index]
+        y_CV = y_sc.iloc[test_index]
+
+        # Make predictions using the k-th model in each cell
+        for i in range(model_grid.shape[0]):
+            for j in range(model_grid.shape[1]):
+                model = model_grid[i, j][fold]
+                fold_pred = pd.DataFrame(model.predict(X_CV), index=y_CV.index, columns=y_CV.columns)
+                
+                if y_pred_grid[i, j] is 0:  # First iteration
+                    y_pred_grid[i, j] = fold_pred
+                    y_test_grid[i, j] = y_CV
+                else:
+                    y_pred_grid[i, j] = pd.concat([y_pred_grid[i, j], fold_pred])
+                    y_test_grid[i, j] = pd.concat([y_test_grid[i, j], y_CV])
+    return y_pred_grid, y_test_grid
+
+def eval_k_fold_grid_search_train(X_sc: pd.DataFrame, y_sc: pd.DataFrame, 
+                                  kfold: KFold, model_grid: np.ndarray, 
+                                  x_params: mdo.AxisParams, y_params: mdo.AxisParams) -> tuple[np.ndarray, np.ndarray]:
+    """Evaluates the k-fold grid search results using the training folds to assess overfitting.
+
+    Created: 2024/11/12
+
+    Args:
+        X_sc (pd.DataFrame): Scaled feature set.
+        y_sc (pd.DataFrame): Scaled label set.
+        kfold (KFold): KFold object for cross-validation.
+        model_grid (np.ndarray): 2D numpy array of lists. Each cell contains k trained models.
+        x_params (AxisParams): Parameters for the x-axis.
+        y_params (AxisParams): Parameters for the y-axis.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: 2D numpy array of predictions where each cell contains predictions for training data,
+                                       and 2D numpy array of actual values for training data
+    """
+    # Initialize numpy array to store predictions for each parameter combination
+    y_pred_grid = np.zeros(model_grid.shape, dtype=object)
+    y_train_grid = np.zeros(model_grid.shape, dtype=object)
+
+    # Iterate through each fold
+    for fold, (train_index, _) in enumerate(kfold.split(X_sc)):
+        X_train = X_sc.iloc[train_index]
+        y_train = y_sc.iloc[train_index]
+
+        # Make predictions using the k-th model in each cell on its training data
+        for i in range(model_grid.shape[0]):
+            for j in range(model_grid.shape[1]):
+                model = model_grid[i, j][fold]
+                fold_pred = pd.DataFrame(model.predict(X_train), index=y_train.index, columns=y_train.columns)
+                
+                if y_pred_grid[i, j] is 0:  # First iteration
+                    y_pred_grid[i, j] = fold_pred
+                    y_train_grid[i, j] = y_train
+                else:
+                    y_pred_grid[i, j] = pd.concat([y_pred_grid[i, j], fold_pred])
+                    y_train_grid[i, j] = pd.concat([y_train_grid[i, j], y_train])
+
+    return y_pred_grid, y_train_grid
+
+def add_best_fit(axs):
+    if not isinstance(axs, np.ndarray):
+        axs = np.array([axs])
+    
+    for ax in axs.flatten():
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        
+        # Use the smaller range to ensure the line stays within the plot
+        min_val = max(min(xlim[0], ylim[0]), -1000)  # Limit to prevent extreme values
+        max_val = min(max(xlim[1], ylim[1]), 1000)   # Limit to prevent extreme values
+        
+        x = np.linspace(min_val, max_val, 100)
+        y = x  # For y=x line
+        
+        ax.plot(x, y, color='red', linestyle=':', linewidth=1.5, alpha=0.7)
+        
+        # Reset the original limits
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
