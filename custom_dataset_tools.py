@@ -31,8 +31,10 @@ def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> N
         # Append to list
         metrics.append([col, f1, sensitivity, specificity, kappa])
     
-    # Print table
-    print(pd.DataFrame(metrics, columns=['Variable', 'F1 Score', 'Sensitivity', 'Specificity', 'Kappa']))
+    # print and return metrics
+    metrics = pd.DataFrame(metrics, columns=['Variable', 'F1 Score', 'Sensitivity', 'Specificity', 'Kappa'])
+    print(metrics)
+    return metrics
 
 def classify_top(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
     """Returns dataframe of same shape as input dataframe, with each cell being "True" or "False" 

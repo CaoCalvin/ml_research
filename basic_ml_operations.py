@@ -1,31 +1,37 @@
 # preprocessing
-import numpy as np
 from sklearn.model_selection import train_test_split
 
-# data containers
+# data management
 import ml_data_objects as mdo
 import pandas as pd
+import numpy as np
 
-# ML models
-from sklearn.multioutput import MultiOutputRegressor
+# ML 
+from sklearn.model_selection import KFold
 from sklearn.svm import SVR
 
+# evaluation
+from scipy.stats import pearsonr
+
+# other
 import itertools
 
-
 # trains a multi-output regressor SVM model.
-def train_SVR(X_train: pd.DataFrame, y_train: pd.DataFrame, **kwargs) -> SVR:
+def train_SVR(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> SVR:
     """Train an SVR Regressor using SVM.
 
     Created: 2024/09/10
 
     Args:
         X_train (pd.DataFrame): feature matrix
-        y_train (pd.DataFrame): labels
+        y_train (np.ndarray): labels
 
     Returns:
         SVR: The model trained
     """
+
+    assert X_train.shape[0] == y_train.shape[0], "X_train and y_train must have the same number of rows"
+    assert y_train.ndim == 1, "y_train must be a 1D array"
 
     model = SVR(**kwargs)  
     model.fit(X_train, y_train)
@@ -59,8 +65,6 @@ def split(X: pd.DataFrame, y: pd.DataFrame, CV_portion: float, test_portion: flo
     
 
     return X_train, y_train, X_CV, y_CV, X_test, y_test
-
-
 
 def grid_search(X_train: pd.DataFrame, y_train: pd.DataFrame, x_axis_params: mdo.AxisParams, y_axis_params: mdo.AxisParams,
                 train_model_callback: callable, **kwargs) -> np.ndarray:
@@ -99,11 +103,9 @@ def grid_search(X_train: pd.DataFrame, y_train: pd.DataFrame, x_axis_params: mdo
 
     return model_grid
 
-from sklearn.model_selection import KFold
-
 def k_fold_grid_search(X_train_scaled: pd.DataFrame, y_train_scaled: pd.DataFrame, 
                        x_axis_params: mdo.AxisParams, y_axis_params: mdo.AxisParams,
-                       train_model_callback: callable, kfold: KFold, **kwargs) -> np.ndarray:
+                       train_model_callback: callable, kfold: KFold, **kwargs: dict) -> np.ndarray:
     """Grid search using k-fold cross-validation and provided train_model_callback function
 
     Created: 2024/11/10
@@ -115,35 +117,34 @@ def k_fold_grid_search(X_train_scaled: pd.DataFrame, y_train_scaled: pd.DataFram
       y_axis_params (AxisParams): parameters for the y-axis
       train_model_callback (function): function that trains a model and returns the trained model
       kfold (KFold): KFold object for cross-validation
-      **kwargs: additional arguments to pass to train_model_callback
+      **kwargs (dict): additional arguments to pass to train_model_callback
 
     Returns:
-      np.ndarray: 2D numpy array where each cell contains a list of k trained models
+      np.ndarray: 3D numpy array where each cell contains a trained model
     """
 
     # Get all combinations of parameters from x_axis_params and y_axis_params
     param_combinations = list(itertools.product(x_axis_params.values, y_axis_params.values))
 
-    # Create a 2D numpy array to store the lists of models
+    # Create a 3D numpy array to store the models
     num_rows = len(x_axis_params.values)
     num_cols = len(y_axis_params.values)
-    model_grid = np.empty((num_rows, num_cols), dtype=object)
+    model_grid = np.empty((kfold.n_splits, num_rows, num_cols), dtype=object)
 
     # Perform k-fold cross-validation
-    for train_index, val_index in kfold.split(X_train_scaled):
-        X_fold, X_val = X_train_scaled.iloc[train_index], X_train_scaled.iloc[val_index]
-        y_fold, y_val = y_train_scaled.iloc[train_index], y_train_scaled.iloc[val_index]
+    fold = 0
+    for train_index, _ in kfold.split(X_train_scaled):
+        X_fold = X_train_scaled.iloc[train_index]
+        y_fold = y_train_scaled.iloc[train_index]
         
         # Loop through each combination of parameters
         for i, (x_param, y_param) in enumerate(param_combinations):
-            if model_grid[i % num_rows, i // num_rows] is None:
-                model_grid[i % num_rows, i // num_rows] = []
-
             # Train the model using the train_model_callback and the current parameter combination
-            model = train_model_callback(X_fold, y_fold, 
+            model = train_model_callback(X_fold, y_fold.values.ravel(), 
                                          **{x_axis_params.name: x_param, y_axis_params.name: y_param}, 
                                          **kwargs)
-            model_grid[i % num_rows, i // num_rows].append(model)
+            model_grid[fold, i % num_rows, i // num_rows] = model
+        fold += 1
 
     return model_grid
 
@@ -162,3 +163,55 @@ def power_list(base: float, start: int, end: int) -> list:
     """
     assert start < end, "Start must be less than end"
     return [base**i for i in range(start, end + 1)]
+
+def grid_predict(X_sc: pd.DataFrame, model_grid: np.ndarray) -> np.ndarray:
+    """Evaluates single fold's grid search results using scaled test folds.
+
+    Created: 2024/11/03
+
+    Args:
+        X_sc (pd.DataFrame): Scaled feature set.
+        y_sc (pd.DataFrame): Scaled label set.
+        model_grid (np.ndarray): 2D numpy array of models to be evaluated
+
+    Returns:
+        np.ndarray: 2D numpy array where each cell contains single-column dataframe of predictions 
+    """
+    # Initialize numpy array to store predictions for each parameter combination
+    num_rows, num_cols = model_grid.shape
+    y_pred_grid = np.empty((num_rows, num_cols), dtype=object)
+
+    # Make predictions using the model in each cell
+    for i in range(num_rows):
+        for j in range(num_cols):
+            model = model_grid[i, j]
+            y_pred_grid[i, j] = pd.DataFrame(model.predict(X_sc))
+    return y_pred_grid
+
+
+    
+def calculate_pearson_coefficients(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame]) -> np.ndarray:
+    """
+    Calculate Pearson coefficients for the given data.
+
+    Created: 2024/11/12
+
+    Args:
+        x_grid (np.ndarray): 2D numpy array of DataFrames for x values
+        y_grid (np.ndarray): 2D numpy array of DataFrames for y values
+
+    Returns:
+        np.ndarray: 2D numpy array of Pearson coefficients
+    """
+    assert(x_grid.shape == y_grid.shape), f"x and y grids must have the same shape, but they have shapes {x_grid.shape} and {y_grid.shape}"
+    num_rows, num_cols = x_grid.shape
+    pearson_coeffs = np.zeros((num_rows, num_cols))
+
+    for i in range(num_rows):
+        for j in range(num_cols):
+            x_data = x_grid[i, j]
+            y_data = y_grid[i, j]
+            pearson_coef, _ = pearsonr(x_data.iloc[:, 0], y_data.iloc[:, 0])
+            pearson_coeffs[i, j] = pearson_coef
+
+    return pearson_coeffs
