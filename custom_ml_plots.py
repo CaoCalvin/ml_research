@@ -6,16 +6,12 @@ import ml_data_objects as mdo
 
 # Plotting
 import matplotlib.pyplot as plt
+
 import matplotlib.patches as mpatches
 
 from scipy.stats import pearsonr
 
 from matplotlib.colors import LinearSegmentedColormap
-
-from sklearn.preprocessing import StandardScaler
-
-# import k-fold cross-validation
-from sklearn.model_selection import KFold
 
 
 
@@ -192,29 +188,6 @@ def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame]
 
     return fig, axs
 
-def calculate_pearson_coefficients(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame]) -> np.ndarray:
-    """
-    Calculate Pearson coefficients for the given data.
-
-    Args:
-        x_grid (np.ndarray): 2D numpy array of DataFrames for x values
-        y_grid (np.ndarray): 2D numpy array of DataFrames for y values
-
-    Returns:
-        np.ndarray: 2D numpy array of Pearson coefficients
-    """
-    num_rows, num_cols = x_grid.shape
-    pearson_coeffs = np.zeros((num_rows, num_cols))
-
-    for i in range(num_rows):
-        for j in range(num_cols):
-            x_data = x_grid[i, j]
-            y_data = y_grid[i, j]
-            pearson_coef, _ = pearsonr(x_data.iloc[:, 0], y_data.iloc[:, 0])
-            pearson_coeffs[i, j] = pearson_coef
-
-    return pearson_coeffs
-
 def color_spectrum(fig: plt.Figure, axs: np.ndarray, values: np.ndarray, label: str = "Value") -> tuple[plt.Figure, np.ndarray]:
     """
     Highlight the plots according to their given values.
@@ -259,134 +232,6 @@ def color_spectrum(fig: plt.Figure, axs: np.ndarray, values: np.ndarray, label: 
 
     return fig, axs
 
-def eval_grid_search(X_test: pd.DataFrame, X_scaler: StandardScaler, y_test: pd.DataFrame, y_scaler: StandardScaler, model_grid: np.ndarray, x_params: mdo.AxisParams, y_params: mdo.AxisParams) -> tuple[int, int]:
-    """Scales the data and makes predictions using the model_grid.
-
-    Created: 2024/11/02
-
-    Args:
-        X_test (pd.DataFrame): Test data.
-        X_scaler (StandardScaler): Scaler for the test data.
-        y_test (pd.DataFrame): Test labels.
-        y_scaler (StandardScaler): Scaler for the test labels.
-        model_grid (np.ndarray): 2D numpy array of DataFrames. Each cell contains a trained model.
-        x_params (AxisParams): Parameters for the x-axis.
-        y_params (AxisParams): Parameters for the y-axis.        
-        target_var (str): Name of the target column.
-
-    Returns:
-    tuple[int, int]: Indices of the grid with the best Pearson coefficient.
-    """
-    # Scale X_test
-    X_test_scaled = X_scaler.transform(X_test)
-
-    # Convert X_test_scaled to a DataFrame
-    X_test_scaled = pd.DataFrame(X_test_scaled, index=X_test.index, columns=X_test.columns)
-
-    # Initialize numpy array to store predictions
-    y_pred = np.zeros(model_grid.shape, dtype=pd.DataFrame)
-
-    # Make predictions using the trained models on scaled X_test
-    for i in range(model_grid.shape[0]):
-        for j in range(model_grid.shape[1]):
-            model = model_grid[i, j]
-            single_pred_scaled = pd.DataFrame(model.predict(X_test_scaled), index=y_test.index, columns=y_test.columns)
-            single_pred = pd.DataFrame(y_scaler.inverse_transform(single_pred_scaled), index=y_test.index, columns=y_test.columns)
-            y_pred[i, j] = single_pred    
-
-    y_test_grid = np.empty_like(y_pred)  # Initialize an empty array with the same shape as y_pred
-    for i in range(y_pred.shape[0]):
-        for j in range(y_pred.shape[1]):
-            y_test_grid[i, j] = y_test.copy()  # Copy y_test for each element
-    
-    top_pearson_coef_idx = plot_grid(y_pred, y_test_grid, x_params.name, x_params.values, y_params.name, y_params.values)
-
-    return top_pearson_coef_idx
-
-def eval_k_fold_grid_search(X_sc: pd.DataFrame, y_sc: pd.DataFrame, 
-                            kfold: KFold, model_grid: np.ndarray, 
-                            x_params: mdo.AxisParams, y_params: mdo.AxisParams) -> tuple[np.ndarray, np.ndarray]:
-    """Evaluates the k-fold grid search results using the entire scaled dataset.
-
-    Created: 2024/11/03
-
-    Args:
-        X_sc (pd.DataFrame): Scaled feature set.
-        y_sc (pd.DataFrame): Scaled label set.
-        kfold (KFold): KFold object for cross-validation.
-        model_grid (np.ndarray): 2D numpy array of lists. Each cell contains k trained models.
-        x_params (AxisParams): Parameters for the x-axis.
-        y_params (AxisParams): Parameters for the y-axis.
-
-    Returns:
-        tuple[np.ndarray, np.ndarray]: 2D numpy array of predictions where each cell contains list of k predictions and 2D numpy array of actual values
-    """
-    # Initialize numpy array to store predictions for each parameter combination
-    y_pred_grid = np.zeros(model_grid.shape, dtype=object)
-    y_test_grid = np.zeros(model_grid.shape, dtype=object)
-
-    # Iterate through each fold
-    for fold, (_, test_index) in enumerate(kfold.split(X_sc)):
-        X_CV = X_sc.iloc[test_index]
-        y_CV = y_sc.iloc[test_index]
-
-        # Make predictions using the k-th model in each cell
-        for i in range(model_grid.shape[0]):
-            for j in range(model_grid.shape[1]):
-                model = model_grid[i, j][fold]
-                fold_pred = pd.DataFrame(model.predict(X_CV), index=y_CV.index, columns=y_CV.columns)
-                
-                if y_pred_grid[i, j] is 0:  # First iteration
-                    y_pred_grid[i, j] = fold_pred
-                    y_test_grid[i, j] = y_CV
-                else:
-                    y_pred_grid[i, j] = pd.concat([y_pred_grid[i, j], fold_pred])
-                    y_test_grid[i, j] = pd.concat([y_test_grid[i, j], y_CV])
-    return y_pred_grid, y_test_grid
-
-def eval_k_fold_grid_search_train(X_sc: pd.DataFrame, y_sc: pd.DataFrame, 
-                                  kfold: KFold, model_grid: np.ndarray, 
-                                  x_params: mdo.AxisParams, y_params: mdo.AxisParams) -> tuple[np.ndarray, np.ndarray]:
-    """Evaluates the k-fold grid search results using the training folds to assess overfitting.
-
-    Created: 2024/11/12
-
-    Args:
-        X_sc (pd.DataFrame): Scaled feature set.
-        y_sc (pd.DataFrame): Scaled label set.
-        kfold (KFold): KFold object for cross-validation.
-        model_grid (np.ndarray): 2D numpy array of lists. Each cell contains k trained models.
-        x_params (AxisParams): Parameters for the x-axis.
-        y_params (AxisParams): Parameters for the y-axis.
-
-    Returns:
-        tuple[np.ndarray, np.ndarray]: 2D numpy array of predictions where each cell contains predictions for training data,
-                                       and 2D numpy array of actual values for training data
-    """
-    # Initialize numpy array to store predictions for each parameter combination
-    y_pred_grid = np.zeros(model_grid.shape, dtype=object)
-    y_train_grid = np.zeros(model_grid.shape, dtype=object)
-
-    # Iterate through each fold
-    for fold, (train_index, _) in enumerate(kfold.split(X_sc)):
-        X_train = X_sc.iloc[train_index]
-        y_train = y_sc.iloc[train_index]
-
-        # Make predictions using the k-th model in each cell on its training data
-        for i in range(model_grid.shape[0]):
-            for j in range(model_grid.shape[1]):
-                model = model_grid[i, j][fold]
-                fold_pred = pd.DataFrame(model.predict(X_train), index=y_train.index, columns=y_train.columns)
-                
-                if y_pred_grid[i, j] is 0:  # First iteration
-                    y_pred_grid[i, j] = fold_pred
-                    y_train_grid[i, j] = y_train
-                else:
-                    y_pred_grid[i, j] = pd.concat([y_pred_grid[i, j], fold_pred])
-                    y_train_grid[i, j] = pd.concat([y_train_grid[i, j], y_train])
-
-    return y_pred_grid, y_train_grid
-
 def add_best_fit(axs):
     if not isinstance(axs, np.ndarray):
         axs = np.array([axs])
@@ -407,3 +252,5 @@ def add_best_fit(axs):
         # Reset the original limits
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
+
+        
