@@ -9,12 +9,34 @@ import numpy as np
 # ML 
 from sklearn.model_selection import KFold
 from sklearn.svm import SVR
+from xgboost import XGBRegressor
 
 # evaluation
 from scipy.stats import pearsonr
 
 # other
 import itertools
+
+# Define train_XGB function
+def train_XGB(X_train: pd.DataFrame, y_train: np.ndarray, random_state: int = 42, **kwargs) -> XGBRegressor:
+    """Train an XGBoost Regressor.
+
+    Created: 2024/11/16
+
+    Args:
+        X_train (pd.DataFrame): feature matrix
+        y_train (np.ndarray): labels
+
+    Returns:
+        XGBRegressor: The trained model
+    """
+
+    assert X_train.shape[0] == y_train.shape[0], "X_train and y_train must have the same number of rows"
+    assert y_train.ndim == 1, "y_train must be a 1D array"
+
+    model = XGBRegressor(random_state=random_state, **kwargs)
+    model.fit(X_train, y_train)
+    return model
 
 # trains a multi-output regressor SVM model.
 def train_SVR(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> SVR:
@@ -105,7 +127,7 @@ def grid_search(X_train: pd.DataFrame, y_train: pd.DataFrame, x_axis_params: mdo
 
 def k_fold_grid_search(X_train_scaled: pd.DataFrame, y_train_scaled: pd.DataFrame, 
                        x_axis_params: mdo.AxisParams, y_axis_params: mdo.AxisParams,
-                       train_model_callback: callable, kfold: KFold, **kwargs: dict) -> np.ndarray:
+                       train_model_callback: callable, kfold: KFold, **kwargs) -> np.ndarray:
     """Grid search using k-fold cross-validation and provided train_model_callback function
 
     Created: 2024/11/10

@@ -5,7 +5,7 @@ import pandas as pd
 from sklearn.metrics import f1_score, accuracy_score, cohen_kappa_score
 from sklearn.metrics import confusion_matrix
 
-def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> None:
+def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> pd.DataFrame:
     """
     Print neatly formatted table of f1 score, sensitivity, specificity, and kappa 
     for each column given two pandas boolean dataframes.
@@ -17,9 +17,9 @@ def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> N
     actual (pd.DataFrame): Actual dataframe
     """
     metrics = []
-    for col in predictions.columns:
-        y_pred = predictions[col]
-        y_true = actual[col]
+    for i in range(len(predictions.columns)):
+        y_pred = predictions.iloc[:, i]
+        y_true = actual.iloc[:, i]
         
         # Calculate metrics
         f1 = f1_score(y_true, y_pred)
@@ -29,11 +29,10 @@ def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> N
         kappa = cohen_kappa_score(y_true, y_pred)
         
         # Append to list
-        metrics.append([col, f1, sensitivity, specificity, kappa])
+        metrics.append([i, f1, sensitivity, specificity, kappa])
     
     # print and return metrics
     metrics = pd.DataFrame(metrics, columns=['Variable', 'F1 Score', 'Sensitivity', 'Specificity', 'Kappa'])
-    print(metrics)
     return metrics
 
 def classify_top(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
