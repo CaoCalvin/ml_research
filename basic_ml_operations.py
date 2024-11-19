@@ -210,8 +210,6 @@ def grid_predict(X_sc: pd.DataFrame, model_grid: np.ndarray) -> np.ndarray:
             y_pred_grid[i, j] = pd.DataFrame(model.predict(X_sc))
     return y_pred_grid
 
-
-    
 def calculate_pearson_coefficients(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame]) -> np.ndarray:
     """
     Calculate Pearson coefficients for the given data.
