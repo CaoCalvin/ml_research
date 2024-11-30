@@ -29,10 +29,10 @@ def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> p
         kappa = cohen_kappa_score(y_true, y_pred)
         
         # Append to list
-        metrics.append([i, f1, sensitivity, specificity, kappa])
+        metrics.append([f1, sensitivity, specificity, kappa])
     
     # print and return metrics
-    metrics = pd.DataFrame(metrics, columns=['Variable', 'F1 Score', 'Sensitivity', 'Specificity', 'Kappa'])
+    metrics = pd.DataFrame(metrics, columns=['F1 Score', 'Sensitivity', 'Specificity', 'Kappa'])
     return metrics
 
 def classify_top(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
