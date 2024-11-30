@@ -2,12 +2,12 @@
 import pandas as pd
 
 import pandas as pd
-from sklearn.metrics import f1_score, accuracy_score, cohen_kappa_score
+from sklearn.metrics import f1_score, cohen_kappa_score
 from sklearn.metrics import confusion_matrix
 
 def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> pd.DataFrame:
     """
-    Print neatly formatted table of f1 score, sensitivity, specificity, and kappa 
+    Return neatly formatted table of f1 score, sensitivity, specificity, and kappa 
     for each column given two pandas boolean dataframes.
 
     Created 2024/10/29
@@ -16,6 +16,15 @@ def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> p
     predictions (pd.DataFrame): Predictions dataframe
     actual (pd.DataFrame): Actual dataframe
     """
+
+    # Input validation
+    if predictions.shape != actual.shape:
+        raise ValueError("Predictions and actual dataframes must have the same shape")
+    if not all(predictions.dtypes == bool) or not all(actual.dtypes == bool):
+        raise ValueError("All columns in predictions and actual must be boolean")
+    if predictions.isnull().values.any() or actual.isnull().values.any():
+        raise ValueError("Predictions and actual dataframes must not contain missing values")
+
     metrics = []
     for i in range(len(predictions.columns)):
         y_pred = predictions.iloc[:, i]

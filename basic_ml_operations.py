@@ -153,6 +153,17 @@ def calculate_pearson_coefficients(X_grid: np.ndarray[pd.DataFrame], y_grid: np.
         np.ndarray: 2D numpy array of Pearson coefficients
     """
     assert(X_grid.shape == y_grid.shape), f"x and y grids must have the same shape, but they have shapes {X_grid.shape} and {y_grid.shape}"
+
+    assert(X_grid.ndim == 2 and y_grid.ndim == 2), f"x and y grids must be 2D, but they are {X_grid.ndim}D and {y_grid.ndim}D, with shapes {X_grid.shape} and {y_grid.shape}"
+
+    for i in range(X_grid.shape[0]):
+        for j in range(X_grid.shape[1]):
+            assert isinstance(X_grid[i, j], pd.DataFrame), f"Cell ({i}, {j}) in x_grid must be a DataFrame, but {type(X_grid[i, j])} was found"
+            assert isinstance(y_grid[i, j], pd.DataFrame), f"Cell ({i}, {j}) in y_grid must be a DataFrame, but {type(y_grid[i, j])} was found"
+    
+            assert X_grid[i, j].shape[1] == 1, f"Cell ({i}, {j}) in x_grid must have only 1 column, but {X_grid[i, j].shape[1]} was found"
+            assert y_grid[i, j].shape[1] == 1, f"Cell ({i}, {j}) in y_grid must have only 1 column, but {y_grid[i, j].shape[1]} was found"
+
     num_rows, num_cols = X_grid.shape
     pearson_coeffs = np.zeros((num_rows, num_cols))
 
@@ -160,7 +171,7 @@ def calculate_pearson_coefficients(X_grid: np.ndarray[pd.DataFrame], y_grid: np.
         for j in range(num_cols):
             x_data = X_grid[i, j]
             y_data = y_grid[i, j]
-            pearson_coef, _ = pearsonr(x_data.iloc[:, 0], y_data.iloc[:, 0])
+            pearson_coef, _ = pearsonr(x_data, y_data)
             pearson_coeffs[i, j] = pearson_coef
 
     return pearson_coeffs
