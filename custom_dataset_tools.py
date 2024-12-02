@@ -1,4 +1,5 @@
  
+import numpy as np
 import pandas as pd
 
 import pandas as pd
@@ -144,3 +145,23 @@ def avg_rows(df: pd.DataFrame, interval: int) -> pd.DataFrame:
     df_avg.index = new_row_labels
 
     return df_avg
+
+
+def np_array_of_dfs(df: pd.DataFrame, shape: tuple) -> np.ndarray:
+    """Create a numpy array where each cell contains a reference to the input dataframe
+
+    Args:
+        df (pd.DataFrame): input dataframe
+        shape (tuple): shape of the numpy array (any number of dimensions)
+
+    Returns:
+        np.ndarray: numpy array where each cell contains a reference to the input dataframe
+    """
+    array = np.empty(shape, dtype=object)
+
+    # Iterate through every cell in the numpy array
+    for index, _ in np.ndenumerate(array):
+        array[index] = df
+
+    return array
+
