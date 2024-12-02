@@ -112,7 +112,7 @@ def plot_classification_results(predictions: pd.DataFrame, actuals: pd.DataFrame
     plt.tight_layout()
     plt.show()
 
-def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame], x_axis: mdo.AxisParams, y_axis: mdo.AxisParams) -> tuple[plt.Figure, np.ndarray]:
+def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame], x_axis: mdo.AxisParams, y_axis: mdo.AxisParams, suptitle: str = "") -> tuple[plt.Figure, np.ndarray]:
     """Plots a grid of scatter plots for the given data. 
     
     Created: 2024/11/02
@@ -150,7 +150,8 @@ def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame]
     fig, axs = plt.subplots(nrows=num_rows, ncols=num_cols, figsize=(5 * num_cols, 5 * num_rows))
 
     # Set entire subplot grid title
-    fig.suptitle(f"{x_axis.name} vs. {y_axis.name}")
+    plt.subplots_adjust(top=0.93)
+    fig.suptitle(suptitle, y=1.05)
 
     # Determine overall min and max values
     overall_min = min(np.min([df.min().min() for df in x_grid.flatten()]), 
