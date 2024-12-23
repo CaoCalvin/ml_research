@@ -8,17 +8,17 @@ import numpy as np
 
 # ML 
 from sklearn.model_selection import KFold
-from sklearn.svm import SVR
+from sklearn.svm import SVC, SVR
 from xgboost import XGBClassifier, XGBRegressor
 
 # evaluation
 from scipy.stats import pearsonr
-from sklearn.metrics import roc_curve
+from sklearn.metrics import f1_score, roc_curve
 
 # other
 import itertools
 
-def train_XGB_reg(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> XGBRegressor:
+def train_XGB_regressor(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> XGBRegressor:
     """Train an XGBoost Regressor.
 
     Created: 2024/11/16
@@ -26,6 +26,8 @@ def train_XGB_reg(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> XGBRe
     Args:
         X_train (pd.DataFrame): feature matrix
         y_train (np.ndarray): labels
+        **kwargs: keyword arguments to pass to XGBRegressor. For regression pass {objective='reg:squarederror', eval_metric='rmse'}. 
+                For classification pass {objective='binary:logistic' eval_metric='logloss'}
 
     Returns:
         XGBRegressor: The trained model
@@ -34,21 +36,23 @@ def train_XGB_reg(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> XGBRe
     assert X_train.shape[0] == y_train.shape[0], "X_train and y_train must have the same number of rows"
     assert y_train.ndim == 1, "y_train must be a 1D array"
 
-    # round all kwargs to nearest integer
-    kwargs = {k: round(v) for k, v in kwargs.items()}
+    # round all float kwargs to nearest integer
+    kwargs = {k: round(v) if isinstance(v, float) else v for k, v in kwargs.items()}
 
-    model = XGBRegressor(**kwargs, objective='reg:squarederror', eval_metric='rmse')
+    model = XGBRegressor(**kwargs)
     model.fit(X_train, y_train)
     return model
 
-def train_XGB_clf(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> XGBClassifier:
+def train_XGB_classifier(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> XGBClassifier:
     """Train an XGBoost Classifier.
 
-    Created: 2024/11/30
+    Created: 2024/11/16
 
     Args:
         X_train (pd.DataFrame): feature matrix
         y_train (np.ndarray): labels
+        **kwargs: keyword arguments to pass to XGBClassifier. For regression pass {objective='reg:squarederror', eval_metric='rmse'}. 
+                For classification pass {objective='binary:logistic' eval_metric='logloss'}
 
     Returns:
         XGBClassifier: The trained model
@@ -57,15 +61,15 @@ def train_XGB_clf(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> XGBCl
     assert X_train.shape[0] == y_train.shape[0], "X_train and y_train must have the same number of rows"
     assert y_train.ndim == 1, "y_train must be a 1D array"
 
-    # round all kwargs to nearest integer
-    kwargs = {k: round(v) for k, v in kwargs.items()}
+    # round all float kwargs to nearest integer
+    kwargs = {k: round(v) if isinstance(v, float) else v for k, v in kwargs.items()}
 
-    model = XGBClassifier(**kwargs, objective='binary:logistic', eval_metric='logloss')
+    model = XGBClassifier(**kwargs)
     model.fit(X_train, y_train)
-    return model    
+    return model
 
 # trains a multi-output regressor SVM model.
-def train_SVR(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> SVR:
+def train_SVM_regressor(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> SVR:
     """Train an SVR Regressor using SVM.
 
     Created: 2024/09/10
@@ -82,6 +86,27 @@ def train_SVR(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> SVR:
     assert y_train.ndim == 1, "y_train must be a 1D array"
 
     model = SVR(**kwargs)  
+    model.fit(X_train, y_train)
+    return model
+
+# trains a multi-output classifier SVM model.
+def train_SVM_classifier(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> SVC:
+    """Train an SVC Classifier using SVM.
+
+    Created: 2024/09/10
+
+    Args:
+        X_train (pd.DataFrame): feature matrix
+        y_train (np.ndarray): labels
+
+    Returns:
+        SVC: The model trained
+    """
+
+    assert X_train.shape[0] == y_train.shape[0], "X_train and y_train must have the same number of rows"
+    assert y_train.ndim == 1, "y_train must be a 1D array"
+
+    model = SVC(**kwargs)  
     model.fit(X_train, y_train)
     return model
 
@@ -162,44 +187,124 @@ def grid_predict(X_sc: pd.DataFrame, model_grid: np.ndarray) -> np.ndarray:
             y_pred_grid[i, j] = pd.DataFrame(model.predict(X_sc))
     return y_pred_grid
 
-def calculate_pearson_coefficients(X_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame]) -> np.ndarray:
+def grid_predict_proba(X_sc: pd.DataFrame, model_grid: np.ndarray, target: int) -> np.ndarray:
+    """Evaluates single fold's grid search results using scaled test folds, using model's predict_proba method.
+
+    Created: 2024/11/03
+
+    Args:
+        X_sc (pd.DataFrame): Scaled feature set.
+        y_sc (pd.DataFrame): Scaled label set.
+        model_grid (np.ndarray): 2D numpy array of models to be evaluated
+        target: (int): Which class to predict probabilities for (0 = first, etc.)
+
+    Returns:
+        np.ndarray: 2D numpy array where each cell contains single-column dataframe of predictions 
+    """
+    # Initialize numpy array to store predictions for each parameter combination
+    num_rows, num_cols = model_grid.shape
+    y_pred_grid = np.empty((num_rows, num_cols), dtype=object)
+
+    # Make predictions using the model in each cell
+    for i in range(num_rows):
+        for j in range(num_cols):
+            model = model_grid[i, j]
+            y_pred_grid[i, j] = pd.DataFrame((model.predict_proba(X_sc))[:, target])
+    return y_pred_grid
+
+def calculate_pearson_coefficients(preds_grid: np.ndarray[pd.DataFrame], actuals_grid: np.ndarray[pd.DataFrame]) -> np.ndarray:
     """
     Calculate Pearson coefficients for the given data.
 
     Created: 2024/11/12
 
     Args:
-        x_grid (np.ndarray): 2D numpy array of DataFrames for x values
-        y_grid (np.ndarray): 2D numpy array of DataFrames for y values
+        preds_grid (np.ndarray): 2D numpy array of DataFrames for predicted values
+        actuals_grid (np.ndarray): 2D numpy array of DataFrames for actual values
 
     Returns:
         np.ndarray: 2D numpy array of Pearson coefficients
     """
-    assert(X_grid.shape == y_grid.shape), f"x and y grids must have the same shape, but they have shapes {X_grid.shape} and {y_grid.shape}"
 
-    assert(X_grid.ndim == 2 and y_grid.ndim == 2), f"x and y grids must be 2D, but they are {X_grid.ndim}D and {y_grid.ndim}D, with shapes {X_grid.shape} and {y_grid.shape}"
+    # TODO print(f"preds_grid: {preds_grid[0,0]}, actuals_grid: {actuals_grid[0,0]}")
 
-    for i in range(X_grid.shape[0]):
-        for j in range(X_grid.shape[1]):
-            assert isinstance(X_grid[i, j], pd.DataFrame), f"Cell ({i}, {j}) in x_grid must be a DataFrame, but {type(X_grid[i, j])} was found"
-            assert isinstance(y_grid[i, j], pd.DataFrame), f"Cell ({i}, {j}) in y_grid must be a DataFrame, but {type(y_grid[i, j])} was found"
+    assert(preds_grid.shape == actuals_grid.shape), f"preds_grid and actuals_grid grids must have the same shape, but they have shapes {preds_grid.shape} and {actuals_grid.shape}"
+
+    assert(preds_grid.ndim == 2 and actuals_grid.ndim == 2), f"preds_grid and actuals_grid grids must be 2D, but they are {preds_grid.ndim}D and {actuals_grid.ndim}D, with shapes {preds_grid.shape} and {actuals_grid.shape}"
+
+    for i in range(preds_grid.shape[0]):
+        for j in range(preds_grid.shape[1]):
+            assert isinstance(preds_grid[i, j], pd.DataFrame), f"Cell ({i}, {j}) in preds_grid must be a DataFrame, but {type(preds_grid[i, j])} was found"
+            assert isinstance(actuals_grid[i, j], pd.DataFrame), f"Cell ({i}, {j}) in actuals_grid must be a DataFrame, but {type(actuals_grid[i, j])} was found"
     
-            assert X_grid[i, j].shape[1] == 1, f"Cell ({i}, {j}) in x_grid must have only 1 column, but {X_grid[i, j].shape[1]} was found"
-            assert y_grid[i, j].shape[1] == 1, f"Cell ({i}, {j}) in y_grid must have only 1 column, but {y_grid[i, j].shape[1]} was found"
+            assert preds_grid[i, j].shape[1] == 1, f"Cell ({i}, {j}) in preds_grid must have only 1 column, but {preds_grid[i, j].shape[1]} was found"
+            assert actuals_grid[i, j].shape[1] == 1, f"Cell ({i}, {j}) in actuals_grid must have only 1 column, but {actuals_grid[i, j].shape[1]} was found"
 
-    num_rows, num_cols = X_grid.shape
+    num_rows, num_cols = preds_grid.shape
     pearson_coeffs = np.zeros((num_rows, num_cols))
 
     for i in range(num_rows):
         for j in range(num_cols):
-            x_data = X_grid[i, j]
-            y_data = y_grid[i, j]
+            x_data = preds_grid[i, j]
+            y_data = actuals_grid[i, j]
             pearson_coef, _ = pearsonr(x_data, y_data)
             pearson_coeffs[i, j] = pearson_coef
 
     return pearson_coeffs
 
+def calculate_f1_scores(preds_grid: np.ndarray[pd.DataFrame], actuals_grid: np.ndarray[pd.DataFrame]) -> np.ndarray:
+    """
+    Calculate F1 scores for binary classification for the given data.
+
+    Created: 2024/11/12
+
+    Args:
+        preds_grid (np.ndarray): 2D numpy array of DataFrames for predicted values
+        actuals_grid (np.ndarray): 2D numpy array of DataFrames for actual values
+
+    Returns:
+        np.ndarray: 2D numpy array of F1 scores
+    """
+
+    # TODO print(f"preds_grid: {preds_grid[0,0]}, actuals_grid: {actuals_grid[0,0]}")
+
+    assert(preds_grid.shape == actuals_grid.shape), f"preds_grid and actuals_grid grids must have the same shape, but they have shapes {preds_grid.shape} and {actuals_grid.shape}"
+
+    assert(preds_grid.ndim == 2 and actuals_grid.ndim == 2), f"preds_grid and actuals_grid grids must be 2D, but they are {preds_grid.ndim}D and {actuals_grid.ndim}D, with shapes {preds_grid.shape} and {actuals_grid.shape}"
+
+    for i in range(preds_grid.shape[0]):
+        for j in range(preds_grid.shape[1]):
+            assert isinstance(preds_grid[i, j], pd.DataFrame), f"Cell ({i}, {j}) in preds_grid must be a DataFrame, but {type(preds_grid[i, j])} was found"
+            assert isinstance(actuals_grid[i, j], pd.DataFrame), f"Cell ({i}, {j}) in actuals_grid must be a DataFrame, but {type(actuals_grid[i, j])} was found"
+    
+            assert preds_grid[i, j].shape[1] == 1, f"Cell ({i}, {j}) in preds_grid must have only 1 column, but {preds_grid[i, j].shape[1]} was found"
+            assert actuals_grid[i, j].shape[1] == 1, f"Cell ({i}, {j}) in actuals_grid must have only 1 column, but {actuals_grid[i, j].shape[1]} was found"
+
+    num_rows, num_cols = preds_grid.shape
+    f1_scores = np.zeros((num_rows, num_cols))
+
+    for i in range(num_rows):
+        for j in range(num_cols):
+            y_pred = preds_grid[i, j].squeeze()
+            y_true = actuals_grid[i, j].squeeze()
+            f1_scores[i, j] = f1_score(y_true, y_pred)
+
+    return f1_scores
+
 def find_optimal_threshold(y_true: pd.DataFrame, y_pred: pd.DataFrame) -> float:
+    """
+    Find the optimal threshold for a binary classifier based on the ROC curve.
+    This function calculates the Receiver Operating Characteristic (ROC) curve
+    and finds the threshold that minimizes the mean squared error (MSE) between
+    sensitivity (true positive rate) and specificity (1 - false positive rate).
+    Created: 2024/12/01
+    Parameters:
+    y_true (pd.DataFrame): True binary labels.
+    y_pred (pd.DataFrame): Predicted probabilities or scores.
+    Returns:
+    float: The optimal threshold value that minimizes the MSE between sensitivity and specificity.
+    """
+     
     # Calculate ROC curve
     fpr, tpr, thresholds = roc_curve(y_true, y_pred)
     
@@ -214,4 +319,4 @@ def find_optimal_threshold(y_true: pd.DataFrame, y_pred: pd.DataFrame) -> float:
     optimal_idx = np.argmin(mse)
     optimal_threshold = thresholds[optimal_idx]
     
-    return optimal_threshold
+    return float(optimal_threshold)

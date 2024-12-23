@@ -112,7 +112,89 @@ def plot_classification_results(predictions: pd.DataFrame, actuals: pd.DataFrame
     plt.tight_layout()
     plt.show()
 
-def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame], x_axis: mdo.AxisParams, y_axis: mdo.AxisParams, suptitle: str = "") -> tuple[plt.Figure, np.ndarray]:
+from sklearn.metrics import roc_curve, auc
+
+def _render_roc_curves(horiz_data_grid: np.ndarray[pd.DataFrame], 
+                      vert_data_grid: np.ndarray[pd.DataFrame], 
+                      axs: np.ndarray, 
+                      num_rows: int, 
+                      num_cols: int):
+    """Renders ROC curves for binary classification results.
+
+    Created 2024/12/20
+    
+    Args:
+        horiz_data_grid: Grid of DataFrames containing predicted probabilities
+        vert_data_grid: Grid of DataFrames containing true binary labels
+        axs: Matplotlib axes grid to plot on
+        num_rows: Number of rows in the grid
+        num_cols: Number of columns in the grid
+    """
+    for i in range(num_rows):
+        for j in range(num_cols):
+            ax = axs[i, j]
+            
+            # Extract values from DataFrames
+            y_pred = horiz_data_grid[i, j].iloc[:, 0]
+            y_true = vert_data_grid[i, j].iloc[:, 0]
+            
+            # Calculate ROC curve
+            fpr, tpr, _ = roc_curve(y_true, y_pred)
+            
+            # Plot ROC curve with shading
+            ax.plot(fpr, tpr, color='navy', lw=2)
+            ax.fill_between(fpr, tpr, alpha=0.2, color='navy')
+            
+            # Add diagonal reference line
+            ax.plot([0, 1], [0, 1], color='gray', linestyle='--')
+            
+            # Set labels and limits
+            ax.set_xlabel('False Positive Rate')
+            ax.set_ylabel('True Positive Rate')
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.legend(loc='lower right')
+            ax.grid(True)
+
+def _render_scatter_plots(horiz_data_grid: np.ndarray[pd.DataFrame], vert_data_grid: np.ndarray[pd.DataFrame], axs: np.ndarray, num_rows: int, num_cols: int):
+
+    """Renders scatter plots on a grid of subplots.
+        Created: 2024/12/22
+        horiz_data_grid (np.ndarray[pd.DataFrame]): A 2D numpy array where each element is a pandas DataFrame containing the horizontal data for the scatter plots.
+        vert_data_grid (np.ndarray[pd.DataFrame]): A 2D numpy array where each element is a pandas DataFrame containing the vertical data for the scatter plots.
+        axs (np.ndarray): A 2D numpy array of matplotlib Axes objects where the scatter plots will be rendered.
+        num_rows (int): The number of rows in the grid of subplots.
+        num_cols (int): The number of columns in the grid of subplots.
+    """
+    # Determine overall min and max values
+    overall_min = min(np.min([df.min().min() for df in horiz_data_grid.flatten()]), 
+                      np.min([df.min().min() for df in vert_data_grid.flatten()]))
+    overall_max = max(np.max([df.max().max() for df in horiz_data_grid.flatten()]), 
+                      np.max([df.max().max() for df in vert_data_grid.flatten()]))
+
+    # Add a small padding to ensure all points are visible
+    padding = (overall_max - overall_min) * 0.05
+    plot_min = overall_min - padding
+    plot_max = overall_max + padding
+
+    for i in range(num_rows):
+        for j in range(num_cols):
+            ax = axs[i, j]
+            x_data = horiz_data_grid[i, j]
+            y_data = vert_data_grid[i, j]
+
+           # Scatter plot
+            ax.scatter(x_data, y_data, color='navy', s = 10, alpha=0.25)
+
+            # Set labels
+            ax.set_xlabel(f"Predicted")
+            ax.set_ylabel(f"Actual")
+
+            # Set the same limits for both x and y axes
+            ax.set_xlim(plot_min, plot_max)
+            ax.set_ylim(plot_min, plot_max)
+
+def _create_multiplot_grid(horiz_data_grid: np.ndarray[pd.DataFrame], vert_data_grid: np.ndarray[pd.DataFrame], horiz_axis: mdo.AxisParams, vert_axis: mdo.AxisParams, plot_func: callable, suptitle: str = "") -> tuple[plt.Figure, np.ndarray]:
     """Plots a grid of scatter plots for the given data. 
     
     Created: 2024/11/02
@@ -129,65 +211,71 @@ def plot_grid(x_grid: np.ndarray[pd.DataFrame], y_grid: np.ndarray[pd.DataFrame]
         tuple[plt.Figure, np.ndarray]: Figure and 2D numpy array of axes.
     """
 
-    assert x_grid.shape == y_grid.shape, f"x and y grids must have the same shape, but they have shapes {x_grid.shape} and {y_grid.shape}"
-    for i in range(x_grid.shape[0]):
-        for j in range(x_grid.shape[1]):
-            assert isinstance(x_grid[i, j], pd.DataFrame), \
-                f"All dataframes in x_grid must be DataFrames, but {type(x_grid[i, j])} was found at ({i}, {j})"       
-            assert isinstance(y_grid[i, j], pd.DataFrame), \
-                f"All dataframes in y_grid must be DataFrames, but {type(y_grid[i, j])} was found at ({i}, {j})"
-            assert x_grid[i, j].shape[1] == 1, \
-                f"All dataframes in x_grid must have only 1 column, but {x_grid[i, j].shape[1]} was found at ({i}, {j})"
-            assert y_grid[i, j].shape[1] == 1, \
-                f"All dataframes in y_grid must have only 1 column, but {y_grid[i, j].shape[1]} was found at ({i}, {j})"
-            assert x_grid[i, j].shape[0] == y_grid[i, j].shape[0], \
-                f"All corresponding dataframes in x_grid and y_grid must have the same number of datapoints, but {x_grid[i, j].shape[0]} and {y_grid[i, j].shape[0]} were found at ({i}, {j})"
+    assert horiz_data_grid.shape == vert_data_grid.shape, f"x and y grids must have the same shape, but they have shapes {horiz_data_grid.shape} and {vert_data_grid.shape}"
+    for i in range(horiz_data_grid.shape[0]):
+        for j in range(horiz_data_grid.shape[1]):
+            assert isinstance(horiz_data_grid[i, j], pd.DataFrame), \
+                f"All dataframes in x_grid must be DataFrames, but {type(horiz_data_grid[i, j])} was found at ({i}, {j})"       
+            assert isinstance(vert_data_grid[i, j], pd.DataFrame), \
+                f"All dataframes in y_grid must be DataFrames, but {type(vert_data_grid[i, j])} was found at ({i}, {j})"
+            assert horiz_data_grid[i, j].shape[1] == 1, \
+                f"All dataframes in x_grid must have only 1 column, but {horiz_data_grid[i, j].shape[1]} was found at ({i}, {j})"
+            assert vert_data_grid[i, j].shape[1] == 1, \
+                f"All dataframes in y_grid must have only 1 column, but {vert_data_grid[i, j].shape[1]} was found at ({i}, {j})"
+            assert horiz_data_grid[i, j].shape[0] == vert_data_grid[i, j].shape[0], \
+                f"All corresponding dataframes in x_grid and y_grid must have the same number of datapoints, but {horiz_data_grid[i, j].shape[0]} and {vert_data_grid[i, j].shape[0]} were found at ({i}, {j})"
     
     # Get the number of rows and columns for the grid of plots
-    num_rows, num_cols = x_grid.shape
+    num_rows, num_cols = horiz_data_grid.shape
 
     # Create a figure with a grid of subplots
     fig, axs = plt.subplots(nrows=num_rows, ncols=num_cols, figsize=(5 * num_cols, 5 * num_rows))
 
     # Set entire subplot grid title
     plt.subplots_adjust(top=0.93)
-    fig.suptitle(suptitle, y=1.05)
+    fig.suptitle(suptitle, fontweight='bold', fontsize=16, y=0.95)
 
-    # Determine overall min and max values
-    overall_min = min(np.min([df.min().min() for df in x_grid.flatten()]), 
-                      np.min([df.min().min() for df in y_grid.flatten()]))
-    overall_max = max(np.max([df.max().max() for df in x_grid.flatten()]), 
-                      np.max([df.max().max() for df in y_grid.flatten()]))
-
-    # Add a small padding to ensure all points are visible
-    padding = (overall_max - overall_min) * 0.05
-    plot_min = overall_min - padding
-    plot_max = overall_max + padding
+    plot_func(horiz_data_grid, vert_data_grid, axs, num_rows, num_cols)
 
     for i in range(num_rows):
         for j in range(num_cols):
-            ax = axs[i, j]
-            x_data = x_grid[i, j]
-            y_data = y_grid[i, j]
-
-            # Scatter plot
-            ax.scatter(x_data, y_data, color='navy', s = 10, alpha=0.25)
-
-            # Set labels
-            ax.set_xlabel(f"Predicted")
-            ax.set_ylabel(f"Actual")
-
-            # Set the same limits for both x and y axes
-            ax.set_xlim(plot_min, plot_max)
-            ax.set_ylim(plot_min, plot_max)
-
             # Set title denoting which parameters were used
-            ax.set_title(f"{x_axis.name} = {x_axis.values[i]}, {y_axis.name} = {y_axis.values[j]}")
-
-
-    plt.tight_layout()
+            ax = axs[i, j]
+            ax.set_title(f"{horiz_axis.name} = {horiz_axis.values[i]}, {vert_axis.name} = {vert_axis.values[j]}")
 
     return fig, axs
+
+def create_scatter_grid(horiz_data_grid: np.ndarray[pd.DataFrame], vert_data_grid: np.ndarray[pd.DataFrame], horiz_axis: mdo.AxisParams, vert_axis: mdo.AxisParams, suptitle: str = "") -> tuple[plt.Figure, np.ndarray]:
+    """
+    Creates a grid of scatter plots.   
+    Created: 2024/12/22
+    Parameters:
+    horiz_data_grid (np.ndarray[pd.DataFrame]): A 2D array of pandas DataFrames containing the horizontal data for the scatter plots.
+    vert_data_grid (np.ndarray[pd.DataFrame]): A 2D array of pandas DataFrames containing the vertical data for the scatter plots.
+    horiz_axis (mdo.AxisParams): Axis parameters for the horizontal axis.
+    vert_axis (mdo.AxisParams): Axis parameters for the vertical axis.
+    suptitle (str, optional): The super title for the entire grid of plots. Defaults to an empty string.
+    Returns:
+    tuple[plt.Figure, np.ndarray]: A tuple containing the matplotlib Figure object and a 2D array of Axes objects.
+    """
+    
+    return _create_multiplot_grid(horiz_data_grid, vert_data_grid, horiz_axis, vert_axis, _render_scatter_plots, suptitle)
+
+def create_roc_grid(horiz_data_grid: np.ndarray[pd.DataFrame], vert_data_grid: np.ndarray[pd.DataFrame], horiz_axis: mdo.AxisParams, vert_axis: mdo.AxisParams, suptitle: str = "") -> tuple[plt.Figure, np.ndarray]:
+    """
+    Creates a grid of ROC (Receiver Operating Characteristic) curves.
+    Created: 2024/12/20
+    Parameters:
+    horiz_data_grid (np.ndarray[pd.DataFrame]): A 2D numpy array where each element is a pandas DataFrame containing the horizontal data for the ROC curves.
+    vert_data_grid (np.ndarray[pd.DataFrame]): A 2D numpy array where each element is a pandas DataFrame containing the vertical data for the ROC curves.
+    horiz_axis (mdo.AxisParams): Axis parameters for the horizontal axis.
+    vert_axis (mdo.AxisParams): Axis parameters for the vertical axis.
+    suptitle (str, optional): The super title for the entire grid of plots. Defaults to an empty string.
+    Returns:
+    tuple[plt.Figure, np.ndarray]: A tuple containing the matplotlib Figure object and a numpy array of Axes objects.
+    """
+    
+    return _create_multiplot_grid(horiz_data_grid, vert_data_grid, horiz_axis, vert_axis, _render_roc_curves, suptitle)
 
 def color_spectrum(fig: plt.Figure, axs: np.ndarray, values: np.ndarray, label: str = "Value") -> tuple[plt.Figure, np.ndarray]:
     """
@@ -234,6 +322,18 @@ def color_spectrum(fig: plt.Figure, axs: np.ndarray, values: np.ndarray, label: 
     return fig, axs
 
 def add_best_fit(axs):
+    """
+    Adds a best fit line (y=x) to the given matplotlib axes.
+    Created: 2024/12/01
+    Parameters:
+    axs (matplotlib.axes.Axes or numpy.ndarray of matplotlib.axes.Axes): 
+        A single matplotlib Axes object or an array of Axes objects.
+    Notes:
+    - The function ensures that the best fit line stays within the plot limits.
+    - The line is plotted in red with a dotted style, a linewidth of 1.5, and an alpha of 0.7.
+    - The original x and y limits of the axes are restored after plotting the line.
+    """
+
     if not isinstance(axs, np.ndarray):
         axs = np.array([axs])
     

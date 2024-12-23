@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from sklearn.datasets import make_regression
 from basic_ml_operations import (
-    train_XGB_reg, train_SVR, train_model_grid, power_list,
+    train_XGB_regressor, train_SVM_regressor, train_model_grid, power_list,
     grid_predict, calculate_pearson_coefficients
 )
 from ml_data_objects import AxisParams
@@ -14,16 +14,16 @@ def sample_data():
     X, y = make_regression(n_samples=100, n_features=5, noise=0.1, random_state=42)
     return pd.DataFrame(X), pd.DataFrame(y)
 
-def test_train_XGB_regr(sample_data):
+def test_train_XGB(sample_data):
     X, y = sample_data
-    model = train_XGB_reg(X, y.values.ravel())
+    model = train_XGB_regressor(X, y.values.ravel())
     assert hasattr(model, 'predict')
     predictions = model.predict(X)
     assert predictions.shape == (100,)
 
-def test_train_SVR(sample_data):
+def test_train_SVM_reg(sample_data):
     X, y = sample_data
-    model = train_SVR(X, y.values.ravel())
+    model = train_SVM_regressor(X, y.values.ravel())
     assert hasattr(model, 'predict')
     predictions = model.predict(X)
     assert predictions.shape == (100,)

@@ -165,3 +165,30 @@ def np_array_of_dfs(df: pd.DataFrame, shape: tuple) -> np.ndarray:
 
     return array
 
+def pretty_print_np_array_of_dfs(arr, rows_per_df=6):
+    for i in range(arr.shape[0]):
+        row_dfs = []
+        max_height = 0
+        
+        for j in range(arr.shape[1]):
+            df = arr[i, j]
+            if len(df) > rows_per_df:
+                df_str = pd.concat([df.head(rows_per_df // 2), pd.DataFrame([["..."] * df.shape[1]], index=["..."], columns=df.columns), df.tail(rows_per_df // 2)]).to_string()
+            else:
+                df_str = df.to_string()
+            
+            df_lines = df_str.split('\n')
+            max_height = max(max_height, len(df_lines))
+            row_dfs.append(df_lines)
+        
+        print(f"Row {i}:")
+        for line in range(max_height):
+            row_output = []
+            for df_lines in row_dfs:
+                if line < len(df_lines):
+                    row_output.append(df_lines[line].ljust(40))
+                else:
+                    row_output.append(' ' * 40)
+            print('    '.join(row_output))
+        
+        print("\n" + "-" * 200 + "\n")
