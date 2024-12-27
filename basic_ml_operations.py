@@ -295,20 +295,36 @@ def find_optimal_threshold(y_true: pd.DataFrame, y_pred: pd.DataFrame) -> float:
     """
     Find the optimal threshold for a binary classifier based on the ROC curve.
     This function calculates the Receiver Operating Characteristic (ROC) curve
-    and finds the threshold that minimizes the mean squared error (MSE) between
-    sensitivity (true positive rate) and specificity (1 - false positive rate).
+    and finds the threshold that minimizes the MSE between sensitivity and specificity.
+
     Created: 2024/12/01
+
     Parameters:
-    y_true (pd.DataFrame): True binary labels.
-    y_pred (pd.DataFrame): Predicted probabilities or scores.
+    y_true (pd.DataFrame): True binary labels (0/1 values)
+    y_pred (pd.DataFrame): Predicted probabilities (continuous values between 0 and 1)
+
     Returns:
     float: The optimal threshold value that minimizes the MSE between sensitivity and specificity.
+
+    Raises:
+    ValueError: If inputs are not in correct format or range
     """
+    # Convert DataFrames to arrays and validate
+    y_true_arr = y_true.values.ravel()
+    y_pred_arr = y_pred.values.ravel()
+    
+    # Validate binary labels
+    if not np.array_equal(y_true_arr, y_true_arr.astype(bool)):
+        raise ValueError("y_true must contain only binary values (0/1)")
+    
+    # Validate probability range
+    if not ((y_pred_arr >= 0).all() and (y_pred_arr <= 1).all()):
+        raise ValueError("y_pred must contain probabilities between 0 and 1")
      
     # Calculate ROC curve
-    fpr, tpr, thresholds = roc_curve(y_true, y_pred)
+    fpr, tpr, thresholds = roc_curve(y_true_arr, y_pred_arr)
     
-    # Calculate sensitivity and specificity for each threshold
+    # Calculate sensitivity and specificity
     sensitivity = tpr
     specificity = 1 - fpr
     
