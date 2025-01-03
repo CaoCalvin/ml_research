@@ -18,6 +18,53 @@ from sklearn.metrics import f1_score, roc_curve
 # other
 import itertools
 
+def classify_top(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    """Returns dataframe of same shape as input dataframe, with each cell being "True" or "False" 
+       depending on whether the original datapoint is in a specified top percentile of the original datapoints 
+       in that column.
+
+       Created: 2024/10/02
+
+    Args:
+        df (pd.DataFrame): input dataframe with numeric values
+        threshold (float): number between 0 and 1 specifying "top" threshold.
+
+    Returns:
+        pd.DataFrame: new dataframe where each cell is True or False depending on whether the corresponding value in
+                      the original dataframe is a "top" value
+    """
+    # create an empty dataframe
+    top_df = pd.DataFrame(index=df.index, columns=df.columns)
+
+    for col in df.columns:
+        # Calculate the nth percentile value
+        threshold_val = df[col].quantile(threshold)
+        # Create a boolean mask where values are greater than or equal to the threshold
+        top_df[col] = df[col] >= threshold_val
+
+    return top_df
+
+def grid_classify_top(df_array: np.ndarray, threshold: float) -> np.ndarray:
+    """Applies classify_top to each dataframe in a numpy array.
+
+    Created: 2025/01/03
+    
+    Args:
+        df_array (np.ndarray): Array containing pandas DataFrames
+        threshold (float): number between 0 and 1 specifying "top" threshold
+        
+    Returns:
+        np.ndarray: Array of same shape as input, containing classified DataFrames
+    """
+    # Create output array of same shape
+    result = np.empty_like(df_array, dtype=object)
+    
+    # Iterate through array using ndindex to handle arbitrary dimensions
+    for idx in np.ndindex(df_array.shape):
+        result[idx] = classify_top(df_array[idx], threshold)
+        
+    return result
+
 def train_XGB_regressor(X_train: pd.DataFrame, y_train: np.ndarray, **kwargs) -> XGBRegressor:
     """Train an XGBoost Regressor.
 

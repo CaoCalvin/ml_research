@@ -6,3 +6,5 @@ __pycache__/
 /settings.json
 .trunk/
 test.py
+./.vscode/
+data_and_plots/

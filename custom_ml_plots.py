@@ -354,4 +354,52 @@ def add_best_fit(axs):
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
 
+def plot_model_metrics(df : pd.DataFrame, model_name : str) -> plt.Figure:
+    """
+        Plots the performance metrics of a given model.
+        Created: 2025/01/02
+         Parameters:
+        df (pd.DataFrame): DataFrame containing the performance metrics. Each column represents a different metric.
+        model_name (str): Name of the model to be displayed in the plot title.
+        Returns:
+        plt.Figure: The matplotlib figure object containing the plots.
+    """
+    
+    # Style parameters
+    plt.rcParams.update({'font.size': 12})
+    colors = ['#2ecc71', '#3498db', '#9b59b6', '#e74c3c', '#f1c40f', '#1abc9c']
+    
+    # Get dimensions
+    n_metrics = len(df.columns)
+    
+    # Create figure and subplots
+    fig, axes = plt.subplots(1, n_metrics, figsize=(5*n_metrics, 6))
+    
+    # Add bold super-title
+    fig.suptitle(f'Model {model_name} Performance Metrics', fontsize=18, fontweight='bold', y=1.05)
+    
+    # Handle case where there's only one metric
+    if n_metrics == 1:
+        axes = [axes]
+    
+    # Plot each metric
+    for i, metric in enumerate(df.columns):
+        valid_data = df[metric].dropna()
+        bars = axes[i].bar(range(len(valid_data)), valid_data, 
+                          color=colors[:len(valid_data)])
         
+        for bar in bars:
+            height = bar.get_height()
+            axes[i].text(bar.get_x() + bar.get_width()/2., height,
+                        f'{height:.3f}',
+                        ha='center', va='bottom',
+                        fontsize=14)
+        
+        axes[i].set_title(metric, fontsize=16, pad=15)
+        axes[i].set_xticks(range(len(valid_data)))
+        axes[i].set_xticklabels(valid_data.index, rotation=45, fontsize=12)
+        axes[i].tick_params(axis='y', labelsize=12)
+        axes[i].set_ylim(0, 1.0)
+    
+    plt.tight_layout()
+    return fig

@@ -45,32 +45,6 @@ def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> p
     metrics = pd.DataFrame(metrics, columns=['F1 Score', 'Sensitivity', 'Specificity', 'Kappa'])
     return metrics
 
-def classify_top(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
-    """Returns dataframe of same shape as input dataframe, with each cell being "True" or "False" 
-       depending on whether the original datapoint is in a specified top percentile of the original datapoints 
-       in that column.
-
-       Created: 2024/10/02
-
-    Args:
-        df (pd.DataFrame): input dataframe with numeric values
-        threshold (float): number between 0 and 1 specifying "top" threshold.
-
-    Returns:
-        pd.DataFrame: new dataframe where each cell is True or False depending on whether the corresponding value in
-                      the original dataframe is a "top" value
-    """
-    # create an empty dataframe
-    top_df = pd.DataFrame(index=df.index, columns=df.columns)
-
-    for col in df.columns:
-        # Calculate the nth percentile value
-        threshold_val = df[col].quantile(threshold)
-        # Create a boolean mask where values are greater than or equal to the threshold
-        top_df[col] = df[col] >= threshold_val
-
-    return top_df
-
 def assert_no_bad_values(df: pd.DataFrame) -> None:
     """Raises Error if dataframe contains NaN or values or non-numeric type columns
 
@@ -145,7 +119,6 @@ def avg_rows(df: pd.DataFrame, interval: int) -> pd.DataFrame:
     df_avg.index = new_row_labels
 
     return df_avg
-
 
 def np_array_of_dfs(df: pd.DataFrame, shape: tuple) -> np.ndarray:
     """Create a numpy array where each cell contains a reference to the input dataframe
