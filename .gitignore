@@ -7,4 +7,4 @@ __pycache__/
 .trunk/
 test.py
 ./.vscode/
-data_and_plots/
+saved_data_and_plots/
