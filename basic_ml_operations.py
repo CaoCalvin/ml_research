@@ -18,7 +18,7 @@ from sklearn.metrics import f1_score, roc_curve
 # other
 import itertools
 
-def classify_top(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+def continuous_to_binary_quantile(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
     """Returns dataframe of same shape as input dataframe, with each cell being "True" or "False" 
        depending on whether the original datapoint is in a specified top percentile of the original datapoints 
        in that column.
@@ -44,14 +44,35 @@ def classify_top(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
 
     return top_df
 
-def grid_classify_top(df_array: np.ndarray, threshold: float) -> np.ndarray:
+def continuous_to_binary_absolute(predictions_df : pd.DataFrame, threshold : float) -> pd.DataFrame:
+    """
+    Convert regression predictions to binary classifications with boolean output
+
+    Created: 2025/01/10
+    
+    Args:
+        predictions_df (pd.DataFrame): DataFrame with regression predictions
+        threshold (float or dict): Threshold(s) for binary conversion
+                                 Can be single float or dict of thresholds per column
+    
+    Returns:
+        pd.DataFrame: Binary predictions (True/False)
+    """
+    if isinstance(threshold, dict):
+        # Apply different thresholds per column
+        return predictions_df.apply(lambda x: x >= threshold[x.name])
+    else:
+        # Apply same threshold to all columns
+        return predictions_df > threshold
+
+def continuous_to_binary_absolute_grid(df_array: np.ndarray, threshold: float) -> np.ndarray:
     """Applies classify_top to each dataframe in a numpy array.
 
     Created: 2025/01/03
     
     Args:
         df_array (np.ndarray): Array containing pandas DataFrames
-        threshold (float): number between 0 and 1 specifying "top" threshold
+        threshold (float): number above which a line is considered "top"
         
     Returns:
         np.ndarray: Array of same shape as input, containing classified DataFrames
@@ -60,8 +81,8 @@ def grid_classify_top(df_array: np.ndarray, threshold: float) -> np.ndarray:
     result = np.empty_like(df_array, dtype=object)
     
     # Iterate through array using ndindex to handle arbitrary dimensions
-    for idx in np.ndindex(df_array.shape):
-        result[idx] = classify_top(df_array[idx], threshold)
+    for i in np.ndindex(df_array.shape):
+        result[i] = continuous_to_binary_absolute(df_array[i], threshold)
         
     return result
 
@@ -313,8 +334,6 @@ def calculate_f1_scores(preds_grid: np.ndarray[pd.DataFrame], actuals_grid: np.n
         np.ndarray: 2D numpy array of F1 scores
     """
 
-    # TODO print(f"preds_grid: {preds_grid[0,0]}, actuals_grid: {actuals_grid[0,0]}")
-
     assert(preds_grid.shape == actuals_grid.shape), f"preds_grid and actuals_grid grids must have the same shape, but they have shapes {preds_grid.shape} and {actuals_grid.shape}"
 
     assert(preds_grid.ndim == 2 and actuals_grid.ndim == 2), f"preds_grid and actuals_grid grids must be 2D, but they are {preds_grid.ndim}D and {actuals_grid.ndim}D, with shapes {preds_grid.shape} and {actuals_grid.shape}"
@@ -334,42 +353,39 @@ def calculate_f1_scores(preds_grid: np.ndarray[pd.DataFrame], actuals_grid: np.n
         for j in range(num_cols):
             y_pred = preds_grid[i, j].squeeze()
             y_true = actuals_grid[i, j].squeeze()
-            f1_scores[i, j] = f1_score(y_true, y_pred)
+            f1_scores[i, j] = f1_score(y_true, y_pred, zero_division=0)
 
     return f1_scores
 
-def find_optimal_threshold(y_true: pd.DataFrame, y_pred: pd.DataFrame) -> float:
+def find_optimal_threshold_absolute(y_true: pd.DataFrame, y_pred: pd.DataFrame) -> float:
     """
     Find the optimal threshold for a binary classifier based on the ROC curve.
-    This function calculates the Receiver Operating Characteristic (ROC) curve
-    and finds the threshold that minimizes the MSE between sensitivity and specificity.
-
-    Created: 2024/12/01
+    Works with any numeric prediction values by applying min-max normalization.
 
     Parameters:
     y_true (pd.DataFrame): True binary labels (0/1 values)
-    y_pred (pd.DataFrame): Predicted probabilities (continuous values between 0 and 1)
+    y_pred (pd.DataFrame): Predicted values (any numeric values)
 
     Returns:
-    float: The optimal threshold value that minimizes the MSE between sensitivity and specificity.
-
-    Raises:
-    ValueError: If inputs are not in correct format or range
+    float: The optimal threshold value in the original scale
     """
     # Convert DataFrames to arrays and validate
     y_true_arr = y_true.values.ravel()
     y_pred_arr = y_pred.values.ravel()
     
-    # Validate binary labels
     if not np.array_equal(y_true_arr, y_true_arr.astype(bool)):
         raise ValueError("y_true must contain only binary values (0/1)")
     
-    # Validate probability range
-    if not ((y_pred_arr >= 0).all() and (y_pred_arr <= 1).all()):
-        raise ValueError("y_pred must contain probabilities between 0 and 1")
-     
+    # Handle case where all predictions are identical
+    pred_min = np.min(y_pred_arr)
+    pred_max = np.max(y_pred_arr)
+    if pred_max == pred_min:
+        return float(pred_min)  # Return the single value as threshold
+    
+    y_pred_normalized = (y_pred_arr - pred_min) / (pred_max - pred_min)
+    
     # Calculate ROC curve
-    fpr, tpr, thresholds = roc_curve(y_true_arr, y_pred_arr)
+    fpr, tpr, thresholds = roc_curve(y_true_arr, y_pred_normalized)
     
     # Calculate sensitivity and specificity
     sensitivity = tpr
@@ -378,8 +394,11 @@ def find_optimal_threshold(y_true: pd.DataFrame, y_pred: pd.DataFrame) -> float:
     # Calculate mean squared error between sensitivity and specificity
     mse = (sensitivity - specificity) ** 2
     
-    # Find the threshold that minimizes MSE
+    # Find the normalized threshold that minimizes MSE
     optimal_idx = np.argmin(mse)
-    optimal_threshold = thresholds[optimal_idx]
+    optimal_threshold_normalized = thresholds[optimal_idx]
+    
+    # Denormalize threshold to original scale
+    optimal_threshold = optimal_threshold_normalized * (pred_max - pred_min) + pred_min
     
     return float(optimal_threshold)

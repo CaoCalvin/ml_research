@@ -32,17 +32,18 @@ def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> p
         y_true = actual.iloc[:, i]
         
         # Calculate metrics
-        f1 = f1_score(y_true, y_pred)
         tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
         sensitivity = tp / (tp + fn)
         specificity = tn / (tn + fp)
+        precision = tp / (tp + fp)
+        f1 = f1_score(y_true, y_pred)
         kappa = cohen_kappa_score(y_true, y_pred)
         
         # Append to list
-        metrics.append([f1, sensitivity, specificity, kappa])
+        metrics.append([f1, sensitivity, specificity, precision, kappa])
     
-    # print and return metrics
-    metrics = pd.DataFrame(metrics, columns=['F1 Score', 'Sensitivity', 'Specificity', 'Kappa'])
+    metrics = pd.DataFrame(metrics, 
+                         columns=['F1 Score', 'Sensitivity', 'Specificity', 'Precision', 'Kappa'])
     return metrics
 
 def assert_no_bad_values(df: pd.DataFrame) -> None:

@@ -1,9 +1,10 @@
+from custom_dataset_tools import classification_metrics
 import pytest
 import numpy as np
 import pandas as pd
 from sklearn.datasets import make_regression
 from basic_ml_operations import (
-    train_XGB_regressor, train_SVM_regressor, train_model_grid, power_list,
+    find_optimal_threshold_absolute, train_XGB_regressor, train_SVM_regressor, train_model_grid, power_list,
     grid_predict, calculate_pearson_coefficients
 )
 from ml_data_objects import AxisParams
@@ -93,5 +94,109 @@ def test_calculate_pearson_coefficients():
     coeffs = calculate_pearson_coefficients(X_grid, y_grid)
     assert np.allclose(coeffs[0, 0], -1.0)  # Perfect negative correlation
 
+def test_classification_metrics():
+    # Test case 1: Perfect predictions
+    pred_perfect = pd.DataFrame({'col1': [True, False, True]})
+    actual_perfect = pd.DataFrame({'col1': [True, False, True]})
+    metrics_perfect = classification_metrics(pred_perfect, actual_perfect)
+    assert np.allclose(metrics_perfect['F1 Score'], 1.0)
+    assert np.allclose(metrics_perfect['Sensitivity'], 1.0)
+    assert np.allclose(metrics_perfect['Specificity'], 1.0)
+    assert np.allclose(metrics_perfect['Kappa'], 1.0)
+
+    # Test case 2: Mixed predictions
+    pred_mixed = pd.DataFrame({'col1': [True, False, True, False]})
+    actual_mixed = pd.DataFrame({'col1': [True, True, False, False]})
+    metrics_mixed = classification_metrics(pred_mixed, actual_mixed)
+    assert np.allclose(metrics_mixed['F1 Score'], 0.5)
+    assert np.allclose(metrics_mixed['Sensitivity'], 0.5)
+    assert np.allclose(metrics_mixed['Specificity'], 0.5)
+    assert np.allclose(metrics_mixed['Kappa'], 0.0)
+
+    # Test case 3: Complete misclassification
+    pred_wrong = pd.DataFrame({'col1': [False, True, False]})
+    actual_wrong = pd.DataFrame({'col1': [True, False, True]})
+    metrics_wrong = classification_metrics(pred_wrong, actual_wrong)
+    assert np.allclose(metrics_wrong['F1 Score'], 0.0)
+    assert np.allclose(metrics_wrong['Sensitivity'], 0.0)
+    assert np.allclose(metrics_wrong['Specificity'], 0.0)
+    assert np.allclose(metrics_wrong['Kappa'], -0.8)
+
+    # Test case with unequal precision and recall
+    pred_unequal = pd.DataFrame({'col1': [True, True, True, False]})
+    actual_unequal = pd.DataFrame({'col1': [True, False, True, False]})
+    metrics_unequal = classification_metrics(pred_unequal, actual_unequal)
+    assert np.allclose(metrics_unequal['Sensitivity'], 1.0)
+    assert np.allclose(metrics_unequal['Specificity'], 0.5)
+
+    # Test error conditions
+    with pytest.raises(ValueError):
+        pred_wrong_shape = pd.DataFrame({'col1': [True, False]})
+        actual_wrong_shape = pd.DataFrame({'col1': [True, False, True]})
+        classification_metrics(pred_wrong_shape, actual_wrong_shape)
+
+    with pytest.raises(ValueError):
+        pred_non_bool = pd.DataFrame({'col1': [1, 0, 1]})
+        actual_non_bool = pd.DataFrame({'col1': [1, 0, 1]})
+        classification_metrics(pred_non_bool, actual_non_bool)
+
+    with pytest.raises(ValueError):
+        pred_nan = pd.DataFrame({'col1': [True, False, np.nan]})
+        actual_nan = pd.DataFrame({'col1': [True, False, True]})
+        classification_metrics(pred_nan, actual_nan)
+
+def test_find_optimal_threshold():
+    # Test basic functionality with balanced data
+    y_true = pd.DataFrame({'col1': [True, False, True, False]})
+    y_pred = pd.DataFrame({'col1': [0.8, 0.2, 0.7, 0.3]})
+    threshold = find_optimal_threshold_absolute(y_true, y_pred)
+    assert 0 <= threshold <= 1
+    
+    # Test with perfect predictions
+    y_true = pd.DataFrame({'col1': [True, False, True, False]})
+    y_pred = pd.DataFrame({'col1': [1.0, 0.0, 1.0, 0.0]})
+    threshold = find_optimal_threshold_absolute(y_true, y_pred)
+    assert 0 <= threshold <= 1
+    
+    # Test with larger dataset
+    y_true = pd.DataFrame({'col1': [True] * 50 + [False] * 50})
+    y_pred = pd.DataFrame({'col1': [0.7] * 50 + [0.3] * 50})
+    threshold = find_optimal_threshold_absolute(y_true, y_pred)
+    assert 0 <= threshold <= 1
+    
+    # Test with imbalanced data
+    y_true = pd.DataFrame({'col1': [True] * 80 + [False] * 20})
+    y_pred = pd.DataFrame({'col1': [0.8] * 80 + [0.2] * 20})
+    threshold = find_optimal_threshold_absolute(y_true, y_pred)
+    assert 0 <= threshold <= 1
+    
+    # Test error conditions
+    # Invalid binary values
+    with pytest.raises(ValueError):
+        y_true_invalid = pd.DataFrame({'col1': [2, 1, 0]})
+        y_pred_valid = pd.DataFrame({'col1': [0.8, 0.2, 0.3]})
+        find_optimal_threshold_absolute(y_true_invalid, y_pred_valid)
+    
+    # Probabilities out of range
+    with pytest.raises(ValueError):
+        y_true_valid = pd.DataFrame({'col1': [True, False, True]})
+        y_pred_invalid = pd.DataFrame({'col1': [1.2, -0.1, 0.5]})
+        find_optimal_threshold_absolute(y_true_valid, y_pred_invalid)
+
+    # Very small differences in predictions
+    y_true = pd.DataFrame({'col1': [True, False, True]})
+    y_pred = pd.DataFrame({'col1': [0.501, 0.499, 0.501]})
+    threshold = find_optimal_threshold_absolute(y_true, y_pred)
+    assert 0 <= threshold <= 1
+
+    # Edge case - all predictions same value
+    y_true = pd.DataFrame({'col1': [True, False, True]})
+    y_pred = pd.DataFrame({'col1': [0.5, 0.5, 0.5]})
+    threshold = find_optimal_threshold_absolute(y_true, y_pred)
+    assert 0 <= threshold <= 1
+    
+
+
 if __name__ == "__main__":
     pytest.main()
+
