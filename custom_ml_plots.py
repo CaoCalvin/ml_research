@@ -120,12 +120,10 @@ def _render_roc_curves(horiz_data_grid: np.ndarray[pd.DataFrame],
                       num_rows: int, 
                       num_cols: int):
     """Renders ROC curves for binary classification results.
-
-    Created 2024/12/20
     
     Args:
-        horiz_data_grid: Grid of DataFrames containing predicted probabilities
-        vert_data_grid: Grid of DataFrames containing true binary labels
+        horiz_data_grid: Grid of DataFrames containing predicted probabilities (0-1)
+        vert_data_grid: Grid of DataFrames containing true binary labels (0 or 1)
         axs: Matplotlib axes grid to plot on
         num_rows: Number of rows in the grid
         num_cols: Number of columns in the grid
@@ -134,27 +132,34 @@ def _render_roc_curves(horiz_data_grid: np.ndarray[pd.DataFrame],
         for j in range(num_cols):
             ax = axs[i, j]
             
-            # Extract values from DataFrames
             y_pred = horiz_data_grid[i, j].iloc[:, 0]
             y_true = vert_data_grid[i, j].iloc[:, 0]
             
-            # Calculate ROC curve
-            fpr, tpr, _ = roc_curve(y_true, y_pred)
+            # Verify predictions are probabilities
+            if not np.all((y_pred >= 0) & (y_pred <= 1)):
+                raise ValueError("Predictions must be probabilities between 0 and 1")
+                
+            # Verify labels are binary
+            if not np.all((y_true == 0) | (y_true == 1)):
+                raise ValueError("True labels must be binary (0 or 1)")
             
-            # Plot ROC curve with shading
-            ax.plot(fpr, tpr, color='navy', lw=2)
+            # Calculate ROC curve with many thresholds
+            fpr, tpr, _ = roc_curve(y_true, y_pred, drop_intermediate=False)
+            roc_auc = auc(fpr, tpr)
+            
+            # Plot curve with higher resolution
+            ax.plot(fpr, tpr, color='navy', lw=2, 
+                   label=f'ROC (AUC = {roc_auc:.2f})')
             ax.fill_between(fpr, tpr, alpha=0.2, color='navy')
             
-            # Add diagonal reference line
+            # Add diagonal random line
             ax.plot([0, 1], [0, 1], color='gray', linestyle='--')
             
-            # Set labels and limits
             ax.set_xlabel('False Positive Rate')
             ax.set_ylabel('True Positive Rate')
             ax.set_xlim([0.0, 1.0])
             ax.set_ylim([0.0, 1.05])
             ax.legend(loc='lower right')
-            ax.grid(True)
 
 def _render_scatter_plots(horiz_data_grid: np.ndarray[pd.DataFrame], vert_data_grid: np.ndarray[pd.DataFrame], axs: np.ndarray, num_rows: int, num_cols: int):
 
