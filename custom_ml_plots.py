@@ -13,7 +13,7 @@ from scipy.stats import pearsonr
 
 from matplotlib.colors import LinearSegmentedColormap
 
-
+from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
 
 def plot_prediction_vs_actual(axs: np.ndarray, row: int, col: int, predicted: pd.DataFrame, actual: pd.DataFrame, 
                                 predicted_top: Optional[pd.DataFrame] = None, actual_top: Optional[pd.DataFrame] = None):
@@ -112,7 +112,53 @@ def plot_classification_results(predictions: pd.DataFrame, actuals: pd.DataFrame
     plt.tight_layout()
     plt.show()
 
-from sklearn.metrics import roc_curve, auc
+def _render_pr_curves(horiz_data_grid: np.ndarray[pd.DataFrame],
+                     vert_data_grid: np.ndarray[pd.DataFrame],
+                     axs: np.ndarray,
+                     num_rows: int,
+                     num_cols: int):
+    """Renders precision-recall curves for binary classification results.
+    
+    Args:
+        horiz_data_grid: Grid of DataFrames containing predicted probabilities (0-1)
+        vert_data_grid: Grid of DataFrames containing true binary labels (0 or 1)
+        axs: Matplotlib axes grid to plot on
+        num_rows: Number of rows in the grid
+        num_cols: Number of columns in the grid
+    """
+    for i in range(num_rows):
+        for j in range(num_cols):
+            ax = axs[i, j]
+            
+            y_pred = horiz_data_grid[i, j].iloc[:, 0]
+            y_true = vert_data_grid[i, j].iloc[:, 0]
+            
+            # Verify predictions are probabilities
+            if not np.all((y_pred >= 0) & (y_pred <= 1)):
+                raise ValueError("Predictions must be probabilities between 0 and 1")
+            
+            # Calculate precision-recall curve
+            precision, recall, _ = precision_recall_curve(y_true, y_pred)
+            
+            # Calculate average precision score
+            ap_score = average_precision_score(y_true, y_pred)
+            
+            # Plot PR curve
+            ax.plot(recall, precision, color='blue', lw=2)
+            ax.set_xlabel('Recall')
+            ax.set_ylabel('Precision')
+            
+            # Add variable name and AP score to title
+            var_name = horiz_data_grid[i, j].columns[0]
+            ax.set_title(f'{var_name}\nAP = {ap_score:.2f}')
+            
+            # Add baseline at y=0.5
+            ax.plot([0, 1], [0.5, 0.5], 'r--', alpha=0.3)
+            
+            # Set axis limits
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.grid(True, alpha=0.3)
 
 def _render_roc_curves(horiz_data_grid: np.ndarray[pd.DataFrame], 
                       vert_data_grid: np.ndarray[pd.DataFrame], 
@@ -265,6 +311,36 @@ def create_scatter_grid(horiz_data_grid: np.ndarray[pd.DataFrame], vert_data_gri
     """
     
     return _create_multiplot_grid(horiz_data_grid, vert_data_grid, horiz_axis, vert_axis, _render_scatter_plots, suptitle)
+
+def create_pr_grid(predicted_values: pd.DataFrame, actual_values: pd.DataFrame,
+                  num_rows: int, num_cols: int) -> tuple[plt.Figure, np.ndarray]:
+    """Creates a grid of precision-recall curves for binary classification results.
+    
+    Args:
+        predicted_values: DataFrame with predicted probabilities (0-1)
+        actual_values: DataFrame with true binary labels (0 or 1)
+        num_rows: Number of rows in visualization grid
+        num_cols: Number of columns in visualization grid
+        
+    Returns:
+        tuple: (matplotlib figure, array of axes)
+    """
+    # Create figure and axes grid
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(5*num_cols, 5*num_rows))
+    axs = np.atleast_2d(axs)
+    
+    # Reshape data into grids matching the visualization layout
+    horiz_data = np.array(np.split(predicted_values, num_rows*num_cols, axis=1))
+    horiz_data = horiz_data.reshape(num_rows, num_cols)
+    
+    vert_data = np.array(np.split(actual_values, num_rows*num_cols, axis=1))
+    vert_data = vert_data.reshape(num_rows, num_cols)
+    
+    # Render the PR curves
+    _render_pr_curves(horiz_data, vert_data, axs, num_rows, num_cols)
+    
+    plt.tight_layout()
+    return fig, axs
 
 def create_roc_grid(horiz_data_grid: np.ndarray[pd.DataFrame], vert_data_grid: np.ndarray[pd.DataFrame], horiz_axis: mdo.AxisParams, vert_axis: mdo.AxisParams, suptitle: str = "") -> tuple[plt.Figure, np.ndarray]:
     """
