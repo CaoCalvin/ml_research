@@ -118,6 +118,8 @@ def _render_pr_curves(horiz_data_grid: np.ndarray[pd.DataFrame],
                      num_rows: int,
                      num_cols: int):
     """Renders precision-recall curves for binary classification results.
+
+    Date: 2024/11/02
     
     Args:
         horiz_data_grid: Grid of DataFrames containing predicted probabilities (0-1)
