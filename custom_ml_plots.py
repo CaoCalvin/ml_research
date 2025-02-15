@@ -6,6 +6,7 @@ import ml_data_objects as mdo
 
 # Plotting
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 import matplotlib.patches as mpatches
 
@@ -298,7 +299,8 @@ def _create_multiplot_grid(horiz_data_grid: np.ndarray[pd.DataFrame], vert_data_
 
     return fig, axs
 
-def create_scatter_grid(horiz_data_grid: np.ndarray[pd.DataFrame], vert_data_grid: np.ndarray[pd.DataFrame], horiz_axis: mdo.AxisParams, vert_axis: mdo.AxisParams, suptitle: str = "") -> tuple[plt.Figure, np.ndarray]:
+def create_scatter_grid(horiz_data_grid: np.ndarray[pd.DataFrame], vert_data_grid: np.ndarray[pd.DataFrame], horiz_axis: mdo.AxisParams, 
+                        vert_axis: mdo.AxisParams, suptitle: str = "") -> tuple[plt.Figure, np.ndarray]:
     """
     Creates a grid of scatter plots.   
     Created: 2024/12/22
@@ -486,3 +488,84 @@ def plot_model_metrics(df : pd.DataFrame, model_name : str) -> plt.Figure:
     
     plt.tight_layout()
     return fig
+
+def sns_plot_roc_curve(y_true, y_pred_proba, title: str = 'ROC Curve'):
+    # print types to debug
+    print(type(y_true))
+    print(type(y_pred_proba))
+    
+    # convert single-column DataFrames to numpy arrays
+    y_true = y_true.values.ravel()
+    y_pred_proba = y_pred_proba.values.ravel()
+    
+    # Calculate ROC curve and AUC
+    fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
+    roc_auc = auc(fpr, tpr)
+    
+    # Set the style
+    sns.set_style('whitegrid')
+    plt.figure(figsize=(8, 6))
+    
+    # Plot ROC curve
+    plt.plot(fpr, tpr, color='darkorange', lw=2, 
+             label=f'ROC curve (AUC = {roc_auc:.2f})')
+    
+    # Plot diagonal line (random classifier)
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    
+    # Customize the plot
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(title)
+    plt.legend(loc='lower right')
+    
+    # Show grid
+    plt.grid(True)
+    
+    return plt
+
+def sns_plot_pr_curve(y_true, y_pred_proba, title = 'Precision-Recall Curve'):
+    """Creates a Precision-Recall curve plot using seaborn styling.
+    
+    Args:
+        y_true (pd.DataFrame): Single-column DataFrame with true binary labels (0 or 1)
+        y_pred_proba (pd.DataFrame): Single-column DataFrame with predicted probabilities (0-1)
+        title (str, optional): Plot title. Defaults to 'Precision-Recall Curve'
+    
+    Returns:
+        plt.Figure: Matplotlib figure containing the PR curve plot
+    """
+    # Convert single-column DataFrames to numpy arrays
+    y_true = y_true.values
+    y_pred_proba = y_pred_proba.values
+    
+    # Calculate PR curve and average precision
+    precision, recall, _ = precision_recall_curve(y_true, y_pred_proba)
+    ap_score = average_precision_score(y_true, y_pred_proba)
+    
+    # Set the style
+    sns.set_style('whitegrid')
+    plt.figure(figsize=(8, 6))
+    
+    # Plot PR curve
+    plt.plot(recall, precision, color='darkorange', lw=2,
+             label=f'PR curve (AP = {ap_score:.2f})')
+    
+    # Plot baseline
+    plt.plot([0, 1], [0.5, 0.5], color='navy', lw=2, linestyle='--',
+             label='Random baseline')
+    
+    # Customize the plot
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(title)
+    plt.legend(loc='lower right')
+    
+    # Show grid
+    plt.grid(True)
+    
+    return plt

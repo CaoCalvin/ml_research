@@ -31,16 +31,21 @@ def classification_metrics(predictions: pd.DataFrame, actual: pd.DataFrame) -> p
         y_pred = predictions.iloc[:, i]
         y_true = actual.iloc[:, i]
         
+        # Check if there's only one unique class
+        if len(np.unique(y_true)) == 1 or len(np.unique(y_pred)) == 1:
+            metrics.append([0, 0, 0, 0, 0])  # Return zeros for degenerate case
+            continue
+            
         # Calculate metrics
         tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
         sensitivity = tp / (tp + fn)
         specificity = tn / (tn + fp)
-        precision = tp / (tp + fp)
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         f1 = f1_score(y_true, y_pred)
         kappa = cohen_kappa_score(y_true, y_pred)
         
-        # Append to list
         metrics.append([f1, sensitivity, specificity, precision, kappa])
+    
     
     metrics = pd.DataFrame(metrics, 
                          columns=['F1 Score', 'Sensitivity', 'Specificity', 'Precision', 'Kappa'])
@@ -103,9 +108,6 @@ def avg_rows(df: pd.DataFrame, interval: int) -> pd.DataFrame:
     """
     # Number of new rows after taking average of every four rows
     new_num_rows = df.shape[0] // interval
-
-    # Every 4th row label
-    new_row_labels = df.index[::interval]
     
     # Initialize output dataframe 
     df_avg = pd.DataFrame(columns=df.columns, index=range(new_num_rows), dtype=float)
@@ -117,7 +119,8 @@ def avg_rows(df: pd.DataFrame, interval: int) -> pd.DataFrame:
         # ensure the resulting averages are numeric
         df_avg.iloc[i, :] = avg_values.astype(float)
 
-    df_avg.index = new_row_labels
+    # Set new row labels as simple sequential integers
+    df_avg.index = range(new_num_rows)
 
     return df_avg
 
