@@ -15,9 +15,13 @@ from scipy.stats import pearsonr
 from matplotlib.colors import LinearSegmentedColormap
 
 from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
-
-def plot_prediction_vs_actual(axs: np.ndarray, row: int, col: int, predicted: pd.DataFrame, actual: pd.DataFrame, 
-                                predicted_top: Optional[pd.DataFrame] = None, actual_top: Optional[pd.DataFrame] = None):
+def plot_prediction_vs_actual(axs: np.ndarray, row: int, col: int, predicted: pd.Series, actual: pd.Series, 
+                              predicted_top: Optional[pd.Series] = None, actual_top: Optional[pd.Series] = None,
+                              title: str = "", xlabel: str = "Predicted values", ylabel: str = "Actual values",
+                              tp_color: tuple[float, float, float] = sns.color_palette()[2],
+                              fp_color: tuple[float, float, float] = sns.color_palette()[0],
+                              tn_color: tuple[float, float, float] = sns.color_palette()[7],
+                              fn_color: tuple[float, float, float] = sns.color_palette()[3]):
     """Creates a scatter plot at the specified 2D axis position [row, col].
 
     Created 09/19/2024
@@ -26,39 +30,77 @@ def plot_prediction_vs_actual(axs: np.ndarray, row: int, col: int, predicted: pd
         axs: 2d array of matplotlib axes
         row: Integer representing row index 
         col: Integer representing the column 
-        predicted: DataFrame with predicted values
-        actual: DataFrame with actual values
-        predicted_top: Optional DataFrame containing binary boolean classifications for whether a value is a "top" value or not
-        actual_top: Optional DataFrame containing binary boolean classifications for whether a value is a "top" value or not
-    """
+        predicted: Series with predicted values
+        actual: Series with actual values
+        predicted_top: Optional Series containing binary boolean classifications for whether a value is a "top" value or not
+        actual_top: Optional Series containing binary boolean classifications for whether a value is a "top" value or not
+        title: Custom title for the subplot
+        xlabel: Custom label for the x-axis
+        ylabel: Custom label for the y-axis
+        tp_color: Color for true positives
+        fp_color: Color for false positives
+        tn_color: Color for true negatives
+        fn_color: Color for false negatives
+    """    
     # Determine colors for points based on provided top classifications
     if predicted_top is not None and actual_top is not None:
-        colors = [
-            'green' if pt and at else 'red' if pt and not at else 'blue' if not pt and at else 'grey'
-            for pt, at in zip(predicted_top.iloc[:, 0], actual_top.iloc[:, 0])
-        ]
+        # Create a categorical variable for the point types
+        categories = []
+        colors_dict = {}
+        for pt, at in zip(predicted_top, actual_top):
+            if pt and at:
+                cat = 'TP'
+                colors_dict[cat] = tp_color
+            elif pt and not at:
+                cat = 'FP'
+                colors_dict[cat] = fp_color
+            elif not pt and at:
+                cat = 'FN'
+                colors_dict[cat] = fn_color
+            else:
+                cat = 'TN'
+                colors_dict[cat] = tn_color
+            categories.append(cat)
     elif predicted_top is not None:
-        colors = ['green' if pt else 'grey' for pt in predicted_top.iloc[:, 0]]
+        categories = ['Top' if pt else 'Not Top' for pt in predicted_top]
+        colors_dict = {'Top': tp_color, 'Not Top': tn_color}
     elif actual_top is not None:
-        colors = ['green' if at else 'grey' for at in actual_top.iloc[:, 0]]
+        categories = ['Top' if at else 'Not Top' for at in actual_top]
+        colors_dict = {'Top': tp_color, 'Not Top': tn_color}
     else:
-        colors = 'blue'  # Default color if no binary classifications provided
+        categories = None
+        colors_dict = None
 
-    # Scatter plot
-    sc = axs[row, col].scatter(actual, predicted, c=colors, alpha=0.5)
-    axs[row, col].set_xlabel("Actual values")
-    axs[row, col].set_ylabel("Predicted values")
-    axs[row, col].set_title(actual.iloc[:, 0].name)
+    # Scatter plot with categorical hue and custom palette
+    if categories is not None:
+        sns.scatterplot(x=predicted, y=actual, ax=axs[row, col], 
+                       hue=categories, palette=colors_dict,
+                       s=20, alpha=0.5, legend=False)
+    else:
+        sns.scatterplot(x=predicted, y=actual, ax=axs[row, col],
+                       color='blue', s=20, alpha=0.5, legend=False)
+
+    axs[row, col].set_xlabel(xlabel)
+    axs[row, col].set_ylabel(ylabel)
+    axs[row, col].set_title(title)
     
     # Plot y=x theoretical perfect line
-    axs[row, col].plot([actual.min(), actual.max()], [actual.min(), actual.max()], 'r--')
+    axs[row, col].plot([predicted.min(), predicted.max()], [predicted.min(), predicted.max()], 'r--')
 
     # Show Pearson coefficient
-    pearson_coef, _ = pearsonr(actual.iloc[:, 0], predicted.iloc[:, 0])
+    pearson_coef, _ = pearsonr(predicted, actual)
     axs[row, col].text(0.05, 0.95, f'Pearson Coefficient = {pearson_coef:.2f}', transform=axs[row, col].transAxes, fontsize=10, verticalalignment='top')
-    
+
+
 def plot_classification_results(predictions: pd.DataFrame, actuals: pd.DataFrame, 
-                                predictions_top: Optional[pd.DataFrame] = None, actuals_top: Optional[pd.DataFrame] = None):
+                                predictions_top: Optional[pd.DataFrame] = None, actuals_top: Optional[pd.DataFrame] = None,
+                                titles: Optional[list] = None, xlabels: Optional[list] = None, ylabels: Optional[list] = None,
+                                save_path: Optional[str] = None, 
+                                tp_color: tuple[float, float, float] = sns.color_palette()[2],
+                                fp_color: tuple[float, float, float] = sns.color_palette()[0],
+                                tn_color: tuple[float, float, float] = sns.color_palette()[7],
+                                fn_color: tuple[float, float, float] = sns.color_palette()[3]
+                                ):
     """Plots all predictions of a multi-output ML model in a series of scatter plots in one row.
 
     Created 2024/09/20
@@ -68,8 +110,13 @@ def plot_classification_results(predictions: pd.DataFrame, actuals: pd.DataFrame
         actuals (pd.DataFrame): Actual values corresponding to predictions 
         predictions_top (pd.DataFrame, optional): Which predictions are considered "top" to highlight. Defaults to None.
         actuals_top (pd.DataFrame, optional): Which actual values are considered "top" to highlight. Defaults to None.
+        titles (list, optional): Custom titles for each subplot. Defaults to None.
+        xlabels (list, optional): Custom x-axis labels for each subplot. Defaults to None.
+        ylabels (list, optional): Custom y-axis labels for each subplot. Defaults to None.
+        save_path (str, optional): Path to save the plot as an SVG file. Defaults to None.
     """
-    # make sure  predictions and actuals have the same shape
+    
+    # make sure predictions and actuals have the same shape
     assert predictions.shape == actuals.shape, "prediction and actual dataframes aren't the same size!"
     
     # num output variables (columns)
@@ -82,36 +129,48 @@ def plot_classification_results(predictions: pd.DataFrame, actuals: pd.DataFrame
     # if only one output variable, axs will not be an array, so wrap it
     if num_vars == 1:
         axs = np.array(axs)   
+    
     for col in range(num_vars):
         # Extract actual & predicted values for the current variable
-        predicted = predictions.iloc[:, col].to_frame()
-        actual = actuals.iloc[:, col].to_frame()
-        prediction_top = predictions_top.iloc[:, col].to_frame()
-        actual_top = actuals_top.iloc[:, col].to_frame()
+        predicted = predictions.iloc[:, col]
+        actual = actuals.iloc[:, col]
+        prediction_top = predictions_top.iloc[:, col] if predictions_top is not None else None
+        actual_top = actuals_top.iloc[:, col] if actuals_top is not None else None
+        title = titles[col] if titles is not None else actual.name
+        xlabel = xlabels[col] if xlabels is not None else "Predicted values"
+        ylabel = ylabels[col] if ylabels is not None else "Actual values"
+        
         plot_prediction_vs_actual(axs, 0, col, predicted, actual, 
-                                prediction_top, actual_top)
+                                  prediction_top, actual_top, title, xlabel, ylabel, tp_color=tp_color, fp_color=fp_color, fn_color=fn_color, tn_color=tn_color)
     
     # legend
     handles = []
     if predictions_top is not None and actuals_top is not None:
         handles = [
-            mpatches.Patch(color='green', label='Both predicted and actual top'),
-            mpatches.Patch(color='red', label='Predicted top, actual not top'),
-            mpatches.Patch(color='blue', label='Actual top, predicted not top'),
-            mpatches.Patch(color='grey', label='Neither predicted nor actual top')
+            mpatches.Patch(color=tp_color, label='Both predicted and actual top'),
+            mpatches.Patch(color=fp_color, label='Predicted top, actual not top'),
+            mpatches.Patch(color=tn_color, label='Neither predicted nor actual top'),
+            mpatches.Patch(color=fn_color, label='Actual top, predicted not top')
         ]
     elif predictions_top is not None or actuals_top is not None:
         handles = [
-            mpatches.Patch(color='green', label='Top'),
-            mpatches.Patch(color='grey', label='Not top')
+            mpatches.Patch(color=tp_color, label='Top'),
+            mpatches.Patch(color=tn_color, label='Not top')
         ]
     
     if handles:
         fig.legend(handles=handles, loc='upper right', bbox_to_anchor=(1, 1.2))
 
-    #adjust layout
+    # adjust layout
     plt.tight_layout()
+    
     plt.show()
+
+    # Save the plot if save_path is provided
+    if save_path:
+        fig.savefig(save_path, format='svg')
+    
+    plt.close()
 
 def _render_pr_curves(horiz_data_grid: np.ndarray[pd.DataFrame],
                      vert_data_grid: np.ndarray[pd.DataFrame],
