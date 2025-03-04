@@ -169,3 +169,36 @@ def pretty_print_np_array_of_dfs(arr, rows_per_df=6):
             print('    '.join(row_output))
         
         print("\n" + "-" * 200 + "\n")
+
+def random_subset(features: pd.DataFrame, labels: pd.DataFrame, p: float, random_state: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Selects a random subset of features and labels by keeping a proportion 'p' of samples.
+
+    Created: 3/3/2025
+
+    Parameters:
+    - features (pd.DataFrame): Input features DataFrame
+    - labels (pd.DataFrame): Input labels DataFrame
+    - p (float): Proportion of rows to keep (0 = remove all, 1 = keep all)
+    - random_state (int): Random seed for reproducibility
+
+    Returns:
+    - tuple[pd.DataFrame, pd.DataFrame]: Tuple of (subsampled features, subsampled labels)
+    """
+    assert 0 <= p <= 1, "Proportion p must be between 0 and 1"
+    assert len(features) == len(labels), "Features and labels must have same number of rows"
+
+    # Calculate the number of rows to keep
+    n_keep = int(len(features) * p)
+
+    if n_keep == 0:
+        return pd.DataFrame(columns=features.columns), pd.DataFrame(columns=labels.columns)
+
+    # Generate random indices
+    indices = np.random.RandomState(random_state).choice(len(features), n_keep, replace=False)
+    
+    # Sample both DataFrames using same indices
+    features_subset = features.iloc[indices]
+    labels_subset = labels.iloc[indices]
+
+    return features_subset, labels_subset
