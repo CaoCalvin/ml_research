@@ -15,6 +15,7 @@ from scipy.stats import pearsonr
 from matplotlib.colors import LinearSegmentedColormap
 
 from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
+
 def plot_prediction_vs_actual(axs: np.ndarray, row: int, col: int, predicted: pd.Series, actual: pd.Series, 
                               predicted_top: Optional[pd.Series] = None, actual_top: Optional[pd.Series] = None,
                               title: str = "", xlabel: str = "Predicted values", ylabel: str = "Actual values",
@@ -90,7 +91,6 @@ def plot_prediction_vs_actual(axs: np.ndarray, row: int, col: int, predicted: pd
     # Show Pearson coefficient
     pearson_coef, _ = pearsonr(predicted, actual)
     axs[row, col].text(0.05, 0.95, f'Pearson Coefficient = {pearson_coef:.2f}', transform=axs[row, col].transAxes, fontsize=10, verticalalignment='top')
-
 
 def plot_classification_results(predictions: pd.DataFrame, actuals: pd.DataFrame, 
                                 predictions_top: Optional[pd.DataFrame] = None, actuals_top: Optional[pd.DataFrame] = None,
